@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block content %}
+      <main class="app-main">
+        <style>
+          #diet-items-body tr > td {
+            background-color: inherit !important;
+          }
+          #diet-items-body tr.is-dirty {
+            outline: 2px solid #f0c419;
+            outline-offset: -2px;
+          }
+          #diet-items-body .cell-input {
+            display: none;
+          }
+          #diet-items-body .cell-value {
+            display: block;
+          }
+          #diet-items-body tr.is-editing .cell-input {
+            display: block;
+          }
+          #diet-items-body tr.is-editing .cell-value {
+            display: none;
+          }
+          #diet-items-body .food-picker {
+            position: relative;
+          }
+          #diet-items-body .food-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            max-height: 220px;
+            overflow: auto;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.25rem;
+            display: none;
+          }
+          #diet-items-body .food-option {
+            padding: 0.25rem 0.5rem;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          #diet-items-body .food-option:hover {
+            background: var(--bs-secondary-bg);
+          }
+          #diet-items-head .name-col,
+          #diet-items-body .name-col {
+            min-width: 260px;
+            width: 30%;
+          }
+          #diet-items-body .food-options {
+            min-width: 260px;
+          }
+          #diet-items-body .color-picker {
+            display: grid;
+            grid-template-columns: repeat(3, 18px);
+            gap: 0.35rem;
+            align-items: center;
+          }
+          #diet-items-body .color-swatch {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            display: inline-block;
+          }
+          #diet-items-body .color-swatch.is-selected {
+            outline: 1px solid var(--bs-body-color);
+          }
+          #diet-items-head .is-hidden-col,
+          #diet-items-body .is-hidden-col {
+            display: none;
+          }
+        </style>
+        <!--begin::App Content Header-->
+        <div class="app-content-header">
+          <!--begin::Container-->
+          <div class="container-fluid">
+            <!--begin::Row-->
+            <div class="row">
+              <div class="col-sm-6"><h3 class="mb-0">Dashboard</h3></div>
+            </div>
+            <!--end::Row-->
+          </div>
+          <!--end::Container-->
+        </div>
+        <!--end::App Content Header-->
+        <!--begin::App Content-->
+        <div class="app-content">
+          <!--begin::Container-->
+          <div class="container-fluid">
+            <!--begin::Row-->
+            <div class="row">
+              <div class="col-12">
+                <h1 class="mb-3">Diet Items</h1>
+                <div class="card">
+                  <div class="card-body">
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                      <button id="diet-items-add" type="button" class="btn btn-outline-primary btn-sm">
+                        Add Item
+                      </button>
+                      <button id="diet-items-save-all" type="button" class="btn btn-success btn-sm">
+                        Save All
+                      </button>
+                      <div id="diet-items-status" class="text-muted small"></div>
+                    </div>
+                    <div class="table-responsive">
+                      <table class="table table-striped align-middle mb-0">
+                        <thead id="diet-items-head"></thead>
+                        <tbody id="diet-items-body"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!--end::Container-->
+        </div>
+        <!--end::App Content-->
+      </main>
+
+{% endblock %}
