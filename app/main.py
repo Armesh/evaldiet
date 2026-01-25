@@ -10,6 +10,7 @@ import signal
 from fastapi import FastAPI, HTTPException, Header, Request, Depends, Response, requests
 from fastapi.params import Body
 from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 
 from fastapi.staticfiles import StaticFiles
 from app.models import DietCreate, DietUpdate
@@ -55,24 +56,14 @@ def handle_httpx_exception(e: Exception):
 
 # serve /static/...
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+templates = Jinja2Templates(directory="app")
 
 def get_db_path() -> str:
     return os.getenv("EVALDIET_DB_PATH", "app/evaldiet.db")
 
 @app.get("/")
-def root():
-    return JSONResponse(content=dict(os.environ),media_type="application/json")
-
-@app.get("/all_routes")
-def all_routes(request: Request):
-    routes = []
-    for route in request.app.routes:
-        routes.append({
-            "path": route.path,
-            # "methods": list(route.methods),
-            "name": route.name,
-        })
-    return routes
+def root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/foods")
 def get_foods():
