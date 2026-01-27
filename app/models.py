@@ -11,6 +11,9 @@ class DietUpdate(BaseModel):
     original_quantity: float | None = None
     original_sort_order: int | None = None
 
+class DietNameUpdate(BaseModel):
+    diet_name_old: str
+    diet_name_new: str
 
 class DietCreate(BaseModel):
     diet_name: str
@@ -18,3 +21,10 @@ class DietCreate(BaseModel):
     quantity: float
     sort_order: int
     color: str | None = None
+
+class DietDelete(BaseModel):
+    diet_name: str
+    fdc_id: int | None = None
+    quantity: float | None = None
+    sort_order: int | None = None
+    delete_all: bool = False

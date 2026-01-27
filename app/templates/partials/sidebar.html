@@ -30,6 +30,12 @@
               id="navigation"
             >
               <li class="nav-header">Diets</li>
+              <li class="nav-item">
+                <button id="sidebar-add-diet-item" type="button" class="nav-link border-0 bg-transparent w-100 text-start">
+                  <i class="nav-icon bi bi-plus-circle"></i>
+                  <p>Add Diet Item</p>
+                </button>
+              </li>
               <li id="diet-nav-loading" class="nav-item">
                 <span class="nav-link text-muted">
                   <i class="nav-icon bi bi-circle"></i>
@@ -46,17 +52,25 @@
               </template>
               <li class="nav-header">-</li>
               <li class="nav-item">
-                <a href="/ui/logout" class="nav-link">
-                  <i class="nav-icon bi bi-box-arrow-right"></i>
-                  <p>Logout</p>
+                <a href="/ui/foods" class="nav-link">
+                  <i class="nav-icon bi bi-food"></i>
+                  <p>Foods</p>
                 </a>
               </li>
+              <li class="nav-header">-</li>
               <li class="nav-item">
                 <a href="#" id="theme-toggle" class="nav-link">
                   <i class="nav-icon bi bi-moon-stars"></i>
                   <p class="mb-0">
                     <span class="theme-text">Dark mode</span>
                   </p>
+                </a>
+              </li>
+              <li class="nav-header">-</li>
+              <li class="nav-item">
+                <a href="/logout" class="nav-link">
+                  <i class="nav-icon bi bi-box-arrow-right"></i>
+                  <p>Logout</p>
                 </a>
               </li>
             </ul>

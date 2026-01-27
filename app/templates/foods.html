@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block content %}
+      <main class="app-main">
+        <!--begin::App Content Header-->
+        <div class="app-content-header">
+          <!--begin::Container-->
+          <div class="container-fluid">
+            <div class="row">
+              <div class="col-12">
+                <h1 class="mb-3">Foods</h1>
+              </div>
+            </div>
+          </div>
+          <!--end::Container-->
+        </div>
+        <!--end::App Content Header-->
+        <!--begin::App Content-->
+        <div class="app-content">
+          <!--begin::Container-->
+          <div class="container-fluid">
+            <!--begin::Row-->
+            <div class="row">
+              <div class="col-12">
+                <style>
+                  .table > :not(caption) > * > * {
+                    background-color: inherit !important;
+                  }
+                  .foods-table tbody tr.food-dominant-protein {
+                    background-color: var(--food-dominant-protein);
+                  }
+
+                  .foods-table tbody tr.food-dominant-carb {
+                    background-color: var(--food-dominant-carb);
+                  }
+
+                  .foods-table tbody tr.food-dominant-fat {
+                    background-color: var(--food-dominant-fat);
+                  }
+                </style>
+
+                <div class="card mb-4">
+                  <div class="card-body">
+                    <form id="foods-fdc-form" class="row gy-2 gx-3 align-items-end">
+                      <div class="col-sm-6 col-lg-4">
+                        <label class="form-label" for="foods-fdc-id">Add food by FDC ID</label>
+                        <input
+                          type="number"
+                          class="form-control"
+                          id="foods-fdc-id"
+                          placeholder="e.g. 170567"
+                          min="1"
+                          required
+                        />
+                      </div>
+                      <div class="col-sm-6 col-lg-3">
+                        <button class="btn btn-primary w-100" type="submit">Fetch & Add Food</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+
+                <div class="card mb-4">
+                  <div class="card-body">
+                    <div class="row gy-2 gx-3 align-items-end">
+                      <div class="col-12">
+                        <label class="form-label">Dominant nutrient colors</label>
+                      </div>
+                      <div class="col-lg-2 col-sm-6">
+                        <div class="row g-3">
+                          <div class="col-4">
+                            <label class="form-label small" for="food-color-protein">Protein</label>
+                            <input type="color" class="form-control form-control-color" id="food-color-protein" />
+                          </div>
+                          <div class="col-4">
+                            <label class="form-label small" for="food-color-carb">Carbohydrate</label>
+                            <input type="color" class="form-control form-control-color" id="food-color-carb" />
+                          </div>
+                          <div class="col-4">
+                            <label class="form-label small" for="food-color-fat">Fat</label>
+                            <input type="color" class="form-control form-control-color" id="food-color-fat" />
+                          </div>
+                        </div>
+                      </div>
+                      <div class="col-12">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="food-color-reset">
+                          Reset to defaults
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card">
+                  <div class="card-body">
+                    <div id="foods-status" class="mb-2 text-muted">Loading foods...</div>
+                    <div class="table-responsive">
+                      <table class="table table-bordered table-hover align-middle foods-table">
+                        <thead id="foods-table-head"></thead>
+                        <tbody id="foods-table-body"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!--end::Container-->
+        </div>
+        <!--end::App Content-->
+      </main>
+
+{% endblock %}

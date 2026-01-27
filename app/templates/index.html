@@ -4,7 +4,7 @@
       <main class="app-main">
         <style>
           #diet-items-body tr > td {
-            background-color: inherit !important;
+            background-color: inherit;
           }
           #diet-items-body tr.is-dirty {
             outline: 2px solid #f0c419;
@@ -56,11 +56,27 @@
           #diet-items-body .food-options {
             min-width: 260px;
           }
-          #diet-items-body .color-picker {
-            display: grid;
+          #diet-items-body .color-dropdown {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+          }
+          #diet-items-body .color-menu {
+            position: absolute;
+            top: calc(100% + 0.25rem);
+            left: 0;
+            z-index: 20;
+            display: none;
             grid-template-columns: repeat(3, 18px);
             gap: 0.35rem;
-            align-items: center;
+            padding: 0.5rem;
+            background: var(--bs-body-bg);
+            border: 1px solid var(--bs-border-color);
+            border-radius: 0.4rem;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+          }
+          #diet-items-body .color-dropdown.is-open .color-menu {
+            display: grid;
           }
           #diet-items-body .color-swatch {
             width: 18px;
@@ -77,6 +93,71 @@
           #diet-items-body .is-hidden-col {
             display: none;
           }
+          #diet-items-body .delete-col {
+            width: 1%;
+            white-space: nowrap;
+          }
+          .diet-items-table .delete-col {
+            display: none;
+          }
+          .diet-items-table.is-editing .delete-col,
+          #diet-items-body tr.is-editing .delete-col {
+            display: table-cell;
+          }
+          .diet-items-table .color-col {
+            display: none;
+          }
+          .diet-items-table.is-editing .color-col,
+          #diet-items-body tr.is-editing .color-col {
+            display: table-cell;
+          }
+          #diet-items-body .totals-row .totals-highlight {
+            font-weight: 600;
+            /* background-color: rgba(182, 157, 35, 0.5); */
+          }
+          #diet-items-body .totals-row .totals-protein {
+            background-color: var(--food-dominant-protein);
+            font-weight: 600;
+          }
+          #diet-items-body .totals-row .totals-carb {
+            background-color: var(--food-dominant-carb);
+            font-weight: 600;
+          }
+          #diet-items-body .totals-row .totals-fat {
+            background-color: var(--food-dominant-fat);
+            font-weight: 600;
+          }
+          .diet-items-table > :not(caption) > * > * {
+            border-color: rgba(230, 230, 230, 0.1);
+            border-left: 1px solid rgba(230, 230, 230, 0.1);
+          }
+          #diet-items-head tr > th {
+            border-top: 1px solid rgba(230, 230, 230, 0.1);
+          }
+
+          .diet-items-table > :not(caption) > * > *:first-child {
+            border-left: 0;
+          }
+
+          .diet-name-editor {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            max-width: 100%;
+          }
+          .diet-name-editor .diet-name-input {
+            display: none;
+            max-width: 360px;
+          }
+          .diet-name-editor.is-editing .diet-name-display {
+            display: none;
+          }
+          .diet-name-editor.is-editing .diet-name-input {
+            display: block;
+          }
+          .diet-name-editor .diet-name-display {
+            cursor: pointer;
+          }
         </style>
         <!--begin::App Content Header-->
         <div class="app-content-header">
@@ -84,7 +165,18 @@
           <div class="container-fluid">
             <!--begin::Row-->
             <div class="row">
-              <div class="col-sm-6"><h3 class="mb-0">Dashboard</h3></div>
+              <div class="col-sm-6">
+                <div class="diet-name-editor" id="diet-name-editor">
+                  <h3 class="mb-0 diet-name-display" id="diet-name-heading">{{ request.query_params.get('diet_name', 'Diet') }}</h3>
+                  <input
+                    class="form-control form-control-sm diet-name-input"
+                    id="diet-name-input"
+                    type="text"
+                    value="{{ request.query_params.get('diet_name', 'Diet') }}"
+                    aria-label="Diet name"
+                  />
+                </div>
+              </div>
             </div>
             <!--end::Row-->
           </div>
@@ -98,7 +190,6 @@
             <!--begin::Row-->
             <div class="row">
               <div class="col-12">
-                <h1 class="mb-3">Diet Items</h1>
                 <div class="card">
                   <div class="card-body">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -109,9 +200,13 @@
                         Save All
                       </button>
                       <div id="diet-items-status" class="text-muted small"></div>
+                      <div class="flex-grow-1"></div>
+                      <button id="diet-items-delete-all" type="button" class="btn btn-outline-danger btn-sm">
+                        Delete All
+                      </button>
                     </div>
                     <div class="table-responsive">
-                      <table class="table table-striped align-middle mb-0">
+                      <table class="table align-middle mb-0 diet-items-table">
                         <thead id="diet-items-head"></thead>
                         <tbody id="diet-items-body"></tbody>
                       </table>

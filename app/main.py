@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from fastapi.staticfiles import StaticFiles
-from app.models import DietCreate, DietUpdate
+from app.models import *
 import re
 
 load_dotenv()  # loads .env from current working directory
@@ -47,147 +47,92 @@ templates.env.globals["rand_id"] = random_alphanumeric
 
 @app.get("/")
 def root(request: Request):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        cur.execute("SELECT diet_name FROM diets ORDER BY diet_name DESC LIMIT 1")
+        row = cur.fetchone()
+        diet_name = row[0] if row else ""
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
+    if diet_name:
+        return RedirectResponse(url=f"/ui/diets?diet_name={diet_name}")
+    return RedirectResponse(url="/ui/diets")
+
+@app.get("/ui/diets")
+def diet_details(request: Request, diet_name: str):
     return templates.TemplateResponse("index.html", {"request": request})
+    
+@app.get("/ui/foods")
+def all_foods(request: Request):
+    return templates.TemplateResponse("foods.html", {"request": request})
+
+@app.get("/ui/foods/edit/{fdc_id}")
+def edit_food(request: Request, fdc_id: int):
+    return templates.TemplateResponse("foods_edit.html", {"request": request, "fdc_id": fdc_id})
+
+
+
+
+
+
 
 @app.get("/api/foods")
-def get_foods():
+@app.get("/api/foods/{fdc_id}")
+def get_foods(fdc_id: int | None = None):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT * FROM foods")
-        rows = cur.fetchall()
-        return [dict(row) for row in rows]
+        if fdc_id is None:
+            cur.execute("SELECT * FROM foods")
+            rows = cur.fetchall()
+            return [dict(row) for row in rows]
+        cur.execute("SELECT * FROM foods WHERE fdc_id = ?", (fdc_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Food not found")
+        return dict(row)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
         if conn is not None:
             conn.close()
 
-@app.get("/api/diets/{diet_name}")
-def get_diets(diet_name: str = "*"):
+@app.put("/api/foods/{fdcid}")
+def update_food(fdcid: int, payload: dict = Body(...)):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
-        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        if diet_name == "*":
-            cur.execute("SELECT * FROM diets")
-        else:
-            cur.execute("SELECT * FROM diets WHERE diet_name = ?",(diet_name,))
+        cur.execute("PRAGMA table_info(foods)")
+        cols = [row[1] for row in cur.fetchall()]
+        valid_cols = set(cols)
 
-        rows = cur.fetchall()
-        return rows
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
-
-@app.get("/api/diets/{diet_name}/nutrition")
-def diets_nutrition(diet_name: str):
-    conn = None
-    try:
-        conn = sqlite3.connect(get_db_path())
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT diets.* FROM diets WHERE diets.diet_name = ?", (diet_name,))
-        diet_items = [dict(row) for row in cur.fetchall()]
-
-        cur.execute("SELECT * FROM foods")
-        foods = [dict(row) for row in cur.fetchall()]
-
-        foods_by_id = {}
-        for food in foods:
-            foods_by_id[food.get("fdc_id")] = food
-
-        diet_calculated = []
-        for diet_entry in diet_items:
-            food = foods_by_id.get(diet_entry.get("fdc_id"))
-            if not food:
+        updates = {}
+        for key, value in (payload or {}).items():
+            if key == "fdc_id":
                 continue
+            if key in valid_cols:
+                updates[key] = value
 
-            serving_size = food.get("Serving Size")
-            try:
-                serving_size = float(serving_size)
-            except (TypeError, ValueError):
-                serving_size = 0.0
+        if not updates:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
 
-            adjusted_food = dict(food)
-            adjusted_food.pop("Serving Size", None)
-            for key, value in food.items():
-                if key in ("fdc_id", "Serving Size"):
-                    continue
-                if isinstance(value, (int, float)):
-                    if serving_size > 0:
-                        adjusted_value = round((float(value) / serving_size) * float(diet_entry.get("quantity", 0)), 2)
-                    else:
-                        adjusted_value = 0.0
-                    adjusted_food[key] = adjusted_value
-
-            merged = dict(diet_entry)
-            merged.update(adjusted_food)
-            diet_calculated.append(merged)
-
-        return diet_calculated
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
-
-@app.post("/api/diet")
-def create_diet(payload: DietCreate):
-    conn = None
-    try:
-        conn = sqlite3.connect(get_db_path())
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO diets (diet_name, fdc_id, quantity, sort_order, color)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (payload.diet_name, payload.fdc_id, payload.quantity, payload.sort_order, payload.color),
-        )
-        conn.commit()
-        return {"created": cur.rowcount}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
-
-@app.put("/api/diet/{name}")
-def update_diet(name: str, payload: DietUpdate):
-    conn = None
-    try:
-        conn = sqlite3.connect(get_db_path())
-        cur = conn.cursor()
-        original_fdc_id = payload.original_fdc_id if payload.original_fdc_id is not None else payload.fdc_id
-        original_quantity = payload.original_quantity if payload.original_quantity is not None else payload.quantity
-        original_sort_order = payload.original_sort_order if payload.original_sort_order is not None else payload.sort_order
-        cur.execute(
-            """
-            UPDATE diets
-            SET diet_name = ?, fdc_id = ?, quantity = ?, sort_order = ?, color = ?
-            WHERE diet_name = ? AND fdc_id = ? AND quantity = ? AND sort_order = ?
-            """,
-            (
-                payload.diet_name,
-                payload.fdc_id,
-                payload.quantity,
-                payload.sort_order,
-                payload.color,
-                name,
-                original_fdc_id,
-                original_quantity,
-                original_sort_order,
-            ),
-        )
+        set_clause = ", ".join([f"\"{col.replace('\"', '\"\"')}\" = ?" for col in updates.keys()])
+        values = list(updates.values()) + [fdcid]
+        cur.execute(f"UPDATE foods SET {set_clause} WHERE fdc_id = ?", values)
         conn.commit()
         if cur.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Diet not found")
+            raise HTTPException(status_code=404, detail="Food not found")
         return {"updated": cur.rowcount}
     except HTTPException:
         raise
@@ -197,7 +142,27 @@ def update_diet(name: str, payload: DietUpdate):
         if conn is not None:
             conn.close()
 
-@app.post("/api/create_food_from_fdcid/{fdcid}") 
+@app.delete("/api/foods/{fdc_id}")
+def delete_food(fdc_id: int):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        cur.execute("DELETE FROM foods WHERE fdc_id = ?", (fdc_id,))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Food not found")
+        return {"deleted": cur.rowcount}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+@app.post("/api/foods/create_food_from_fdcid/{fdcid}") 
 def create_food_from_fdcid(fdcid: int, request: Request):
 
     #API Call to FDC to get food nutrition details
@@ -271,7 +236,7 @@ def create_food_from_fdcid(fdcid: int, request: Request):
     return "Food %d %s created" % (fdcid, foodname)
 
 
-@app.put("/api/update_food_from_fdcid/{fdcid}") 
+@app.put("/api/foods/update_food_from_fdcid/{fdcid}") 
 def update_food_from_fdcid(fdcid: int, request: Request):
     #API Call to FDC to get food nutrition details
     httpx_client =  request.app.state.httpx_client
@@ -335,6 +300,189 @@ def update_food_from_fdcid(fdcid: int, request: Request):
     
     return "Food %d %s updated" % (fdcid, foodname)
 
+
+
+@app.get("/api/diets/{diet_name}")
+def get_diets(diet_name: str = "*"):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        if diet_name == "*":
+            cur.execute("SELECT * FROM diets")
+        else:
+            cur.execute("SELECT * FROM diets WHERE diet_name = ?",(diet_name,))
+
+        rows = cur.fetchall()
+        return rows
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
+@app.get("/api/diets/{diet_name}/nutrition")
+def diets_nutrition(diet_name: str):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT diets.* FROM diets WHERE diets.diet_name = ?", (diet_name,))
+        diet_items = [dict(row) for row in cur.fetchall()]
+
+        cur.execute("SELECT * FROM foods")
+        foods = [dict(row) for row in cur.fetchall()]
+
+        foods_by_id = {}
+        for food in foods:
+            foods_by_id[food.get("fdc_id")] = food
+
+        diet_calculated = []
+        for diet_entry in diet_items:
+            food = foods_by_id.get(diet_entry.get("fdc_id"))
+            if not food:
+                continue
+
+            serving_size = food.get("Serving Size")
+            try:
+                serving_size = float(serving_size)
+            except (TypeError, ValueError):
+                serving_size = 0.0
+
+            adjusted_food = dict(food)
+            adjusted_food.pop("Serving Size", None)
+            for key, value in food.items():
+                if key in ("fdc_id", "Serving Size"):
+                    continue
+                if isinstance(value, (int, float)):
+                    if serving_size > 0:
+                        adjusted_value = round((float(value) / serving_size) * float(diet_entry.get("quantity", 0)), 0)
+                    else:
+                        adjusted_value = 0.0
+                    adjusted_food[key] = adjusted_value
+
+            merged = dict(diet_entry)
+            merged.update(adjusted_food)
+            diet_calculated.append(merged)
+
+        return diet_calculated
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
+@app.post("/api/diet")
+def create_diet(payload: DietCreate):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO diets (diet_name, fdc_id, quantity, sort_order, color)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (payload.diet_name, payload.fdc_id, payload.quantity, payload.sort_order, payload.color),
+        )
+        conn.commit()
+        return {"created": cur.rowcount}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
+@app.put("/api/diet")
+def update_diet(payload: DietUpdate):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        original_fdc_id = payload.original_fdc_id if payload.original_fdc_id is not None else payload.fdc_id
+        original_quantity = payload.original_quantity if payload.original_quantity is not None else payload.quantity
+        original_sort_order = payload.original_sort_order if payload.original_sort_order is not None else payload.sort_order
+        cur.execute(
+            """
+            UPDATE diets
+            SET diet_name = ?, fdc_id = ?, quantity = ?, sort_order = ?, color = ?
+            WHERE diet_name = ? AND fdc_id = ? AND quantity = ? AND sort_order = ?
+            """,
+            (
+                payload.diet_name,
+                payload.fdc_id,
+                payload.quantity,
+                payload.sort_order,
+                payload.color,
+                payload.diet_name,
+                original_fdc_id,
+                original_quantity,
+                original_sort_order,
+            ),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Diet not found")
+        return {"updated": cur.rowcount}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
+@app.delete("/api/diet")
+def delete_diet(payload: DietDelete):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        if payload.delete_all:
+            cur.execute("DELETE FROM diets WHERE diet_name = ?", (payload.diet_name,))
+        else:
+            cur.execute(
+                """
+                DELETE FROM diets
+                WHERE diet_name = ? AND fdc_id = ? AND quantity = ? AND sort_order = ?
+                """,
+                (payload.diet_name, payload.fdc_id, payload.quantity, payload.sort_order),
+            )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Diet item not found")
+        return {"deleted": cur.rowcount}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
+@app.put("/api/diet/name_only")
+def update_diet_name_only(payload: DietNameUpdate):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE diets SET diet_name = ? WHERE diet_name = ?",
+            (payload.diet_name_new, payload.diet_name_old),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Diet not found")
+        return {"updated": cur.rowcount}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
 
 def get_db_path() -> str:
     return os.getenv("EVALDIET_DB_PATH", "app/evaldiet.db")

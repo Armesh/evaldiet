@@ -13,7 +13,13 @@ function getCookie(name) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    const DIET_COLOR_SWATCHES = ["#971d1f", "#ad5322", "#af882e", "#538d28", "#2b8066", "#375875"];
+    const DIET_COLOR_SWATCHES_DARK = ["#971d1f", "#ad5322", "#af882e", "#538d28", "#2b8066", "#375875"];
+    const DIET_COLOR_SWATCHES_LIGHT = ["#d86a6b", "#d68a5a", "#d6b46a", "#8cc26a", "#6bb59c", "#7aa0b5"];
+    const FOOD_DOMINANT_DEFAULTS = {
+        protein: "#b34a4a",
+        carb: "#435fb9",
+        fat: "#c9ab3d",
+    };
     const body = document.body;
     body.setAttribute("data-bs-theme", localStorage.getItem("theme"));
 
@@ -41,6 +47,9 @@ document.addEventListener("DOMContentLoaded", () => {
             localStorage.setItem("theme", opposite);
             
             sync_toggle_button_html_with_theme();
+            if (typeof loadDietItems === "function") {
+                loadDietItems();
+            }
         });
         // Theme switch button end
 
@@ -83,7 +92,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const dietNavLoading = document.getElementById("diet-nav-loading");
     const dietNavTemplate = document.getElementById("diet-nav-item-template");
-    if (dietNavLoading && dietNavTemplate?.content) {
+    const sidebarAddDietItem = document.getElementById("sidebar-add-diet-item");
+
+    function loadDietSidebar() {
+        const loadingItem = document.getElementById("diet-nav-loading");
+        const template = document.getElementById("diet-nav-item-template");
+        const parent = loadingItem?.parentElement || document.getElementById("navigation");
+        if (!loadingItem || !template?.content || !parent) {
+            return;
+        }
+        loadingItem.style.display = "";
+        const loadingLabel = loadingItem.querySelector("p");
+        if (loadingLabel) {
+            loadingLabel.textContent = "Loading...";
+        }
         fetch("/api/diets/*")
             .then((response) => {
                 if (!response.ok) {
@@ -102,25 +124,529 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 if (dietNames.size === 0) {
-                    dietNavLoading.querySelector("p").textContent = "No diets found.";
+                    const emptyLabel = loadingItem.querySelector("p");
+                    if (emptyLabel) {
+                        emptyLabel.textContent = "No diets found.";
+                    }
                     return;
                 }
+                
 
                 const sortedNames = Array.from(dietNames).sort((a, b) => a.localeCompare(b));
-                const parent = dietNavLoading.parentElement;
+                
+                parent.querySelectorAll("[data-diet-link='true']").forEach((node) => node.remove());
                 sortedNames.forEach((name) => {
-                    const item = dietNavTemplate.content.firstElementChild.cloneNode(true);
+                    const item = template.content.firstElementChild.cloneNode(true);
                     const link = item.querySelector("a");
                     const label = item.querySelector("p");
-                    link.href = `/?diet_name=${encodeURIComponent(name)}`;
+                    link.href = `/ui/diets?diet_name=${encodeURIComponent(name)}`;
                     label.textContent = name;
-                    parent.insertBefore(item, dietNavLoading);
+                    link.setAttribute("data-diet-link", "true");
+                    parent.insertBefore(item, loadingItem);
+                    console.log(name);
                 });
-                dietNavLoading.remove();
+                loadingItem.style.display = "none";
             })
             .catch(() => {
-                dietNavLoading.querySelector("p").textContent = "Failed to load diets.";
+                const errorLabel = loadingItem.querySelector("p");
+                if (errorLabel) {
+                    errorLabel.textContent = "Failed to load diets.";
+                }
             });
+    }
+
+    loadDietSidebar();
+
+    if (sidebarAddDietItem) {
+        sidebarAddDietItem.addEventListener("click", () => {
+            const newDiet = `diet_${Date.now()}`;
+
+            sidebarAddDietItem.disabled = true;
+
+            const payload = {
+                diet_name: newDiet,
+                fdc_id: 170567,
+                quantity: 100,
+                sort_order: 1,
+                color: "",
+            };
+
+            fetch("/api/diet", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+            })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                window.location.href = `/ui/diets?diet_name=${encodeURIComponent(newDiet)}`;
+            })
+            .catch((error) => {
+                alert(`Failed to add item: ${error.message}`);
+            })
+            .finally(() => {
+                sidebarAddDietItem.disabled = false;
+            });
+        });
+    }
+
+    const foodsTableHead = document.getElementById("foods-table-head");
+    const foodsTableBody = document.getElementById("foods-table-body");
+    const foodsStatus = document.getElementById("foods-status");
+    const foodsFdcForm = document.getElementById("foods-fdc-form");
+    const foodsFdcInput = document.getElementById("foods-fdc-id");
+    const foodColorProtein = document.getElementById("food-color-protein");
+    const foodColorCarb = document.getElementById("food-color-carb");
+    const foodColorFat = document.getElementById("food-color-fat");
+    const foodColorReset = document.getElementById("food-color-reset");
+
+    function getDietColorSwatches() {
+        return localStorage.getItem("theme") === "light"
+            ? DIET_COLOR_SWATCHES_LIGHT
+            : DIET_COLOR_SWATCHES_DARK;
+    }
+
+    function parseNumber(value) {
+        if (typeof value === "number" && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) {
+            return Number(value);
+        }
+        return 0;
+    }
+
+    function setDominantColorVars(vars) {
+        const root = document.documentElement;
+        if (vars.protein) {
+            root.style.setProperty("--food-dominant-protein", vars.protein);
+        }
+        if (vars.carb) {
+            root.style.setProperty("--food-dominant-carb", vars.carb);
+        }
+        if (vars.fat) {
+            root.style.setProperty("--food-dominant-fat", vars.fat);
+        }
+    }
+
+    function applyDominantColorsFromStorage() {
+        if (!localStorage.getItem("food-dominant-protein")) {
+            localStorage.setItem("food-dominant-protein", FOOD_DOMINANT_DEFAULTS.protein);
+        }
+        if (!localStorage.getItem("food-dominant-carb")) {
+            localStorage.setItem("food-dominant-carb", FOOD_DOMINANT_DEFAULTS.carb);
+        }
+        if (!localStorage.getItem("food-dominant-fat")) {
+            localStorage.setItem("food-dominant-fat", FOOD_DOMINANT_DEFAULTS.fat);
+        }
+        const defaults = { ...FOOD_DOMINANT_DEFAULTS };
+        const stored = {
+            protein: localStorage.getItem("food-dominant-protein") || defaults.protein,
+            carb: localStorage.getItem("food-dominant-carb") || defaults.carb,
+            fat: localStorage.getItem("food-dominant-fat") || defaults.fat,
+        };
+        setDominantColorVars(stored);
+        return { defaults, stored };
+    }
+
+    function initDominantColorPickers() {
+        if (!foodColorProtein || !foodColorCarb || !foodColorFat) {
+            return;
+        }
+        const { defaults, stored } = applyDominantColorsFromStorage();
+        foodColorProtein.value = stored.protein;
+        foodColorCarb.value = stored.carb;
+        foodColorFat.value = stored.fat;
+
+        foodColorProtein.addEventListener("input", () => {
+            const value = foodColorProtein.value;
+            localStorage.setItem("food-dominant-protein", value);
+            setDominantColorVars({ protein: value });
+        });
+        foodColorCarb.addEventListener("input", () => {
+            const value = foodColorCarb.value;
+            localStorage.setItem("food-dominant-carb", value);
+            setDominantColorVars({ carb: value });
+        });
+        foodColorFat.addEventListener("input", () => {
+            const value = foodColorFat.value;
+            localStorage.setItem("food-dominant-fat", value);
+            setDominantColorVars({ fat: value });
+        });
+
+        if (foodColorReset) {
+            foodColorReset.addEventListener("click", () => {
+                localStorage.removeItem("food-dominant-protein");
+                localStorage.removeItem("food-dominant-carb");
+                localStorage.removeItem("food-dominant-fat");
+                const resetValues = {
+                    protein: defaults.protein,
+                    carb: defaults.carb,
+                    fat: defaults.fat,
+                };
+                setDominantColorVars(resetValues);
+                foodColorProtein.value = resetValues.protein;
+                foodColorCarb.value = resetValues.carb;
+                foodColorFat.value = resetValues.fat;
+            });
+        }
+    }
+
+    function getDominantNutrient(food) {
+        const protein = parseNumber(food["Protein g"]);
+        const carb = parseNumber(food["Carbohydrate, by difference g"]);
+        const fat = parseNumber(food["Total lipid (fat) g"]);
+        if (protein > carb && protein > fat) {
+            return "protein";
+        }
+        if (carb > protein && carb > fat) {
+            return "carb";
+        }
+        if (fat > protein && fat > carb) {
+            return "fat";
+        }
+        return "";
+    }
+
+    function renderFoodsTable(foods) {
+        if (!foodsTableHead || !foodsTableBody || !foodsStatus) {
+            return;
+        }
+        if (!Array.isArray(foods) || foods.length === 0) {
+            foodsTableHead.innerHTML = "";
+            foodsTableBody.innerHTML = "";
+            foodsStatus.textContent = "No foods found.";
+            return;
+        }
+
+        const columns = Object.keys(foods[0] || {});
+        const headRow = document.createElement("tr");
+        columns.forEach((col) => {
+            const th = document.createElement("th");
+            th.textContent = col;
+            headRow.appendChild(th);
+        });
+        const actionsTh = document.createElement("th");
+        actionsTh.textContent = "Actions";
+        headRow.appendChild(actionsTh);
+        foodsTableHead.innerHTML = "";
+        foodsTableHead.appendChild(headRow);
+
+        const fragment = document.createDocumentFragment();
+        foods.forEach((food) => {
+            const row = document.createElement("tr");
+            const dominant = getDominantNutrient(food);
+            if (dominant) {
+                row.classList.add(`food-dominant-${dominant}`);
+            }
+
+            columns.forEach((col) => {
+                const cell = document.createElement("td");
+                cell.textContent = food?.[col] ?? "";
+                row.appendChild(cell);
+            });
+
+            const actionCell = document.createElement("td");
+            const editLink = document.createElement("a");
+            editLink.className = "btn btn-sm btn-outline-primary me-2";
+            editLink.textContent = "Edit";
+            if (food?.fdc_id != null) {
+                editLink.href = `/ui/foods/edit/${encodeURIComponent(food.fdc_id)}`;
+            } else {
+                editLink.href = "#";
+                editLink.classList.add("disabled");
+            }
+            actionCell.appendChild(editLink);
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.type = "button";
+            deleteBtn.className = "btn btn-sm btn-danger";
+            deleteBtn.textContent = "Delete";
+            deleteBtn.addEventListener("click", () => {
+                const name = food?.Name ?? "this food";
+                const fdcId = food?.fdc_id;
+                if (fdcId == null) {
+                    alert("Missing FDC ID for this food.");
+                    return;
+                }
+                fetch(`/api/foods/${encodeURIComponent(fdcId)}`, { method: "DELETE" })
+                    .then((response) => {
+                        if (!response.ok) {
+                            throw new Error(`Request failed with ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(() => {
+                        loadFoods();
+                    })
+                    .catch((error) => {
+                        alert(`Failed to delete: ${error.message}`);
+                    });
+            });
+            actionCell.appendChild(deleteBtn);
+            row.appendChild(actionCell);
+
+            fragment.appendChild(row);
+        });
+
+        foodsTableBody.innerHTML = "";
+        foodsTableBody.appendChild(fragment);
+        foodsStatus.textContent = `Loaded ${foods.length} foods.`;
+    }
+
+    function loadFoods() {
+        if (!foodsStatus) {
+            return;
+        }
+        foodsStatus.textContent = "Loading foods...";
+        fetch("/api/foods")
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((foods) => {
+                renderFoodsTable(foods);
+            })
+            .catch((error) => {
+                if (foodsStatus) {
+                    foodsStatus.textContent = `Failed to load foods: ${error.message}`;
+                }
+            });
+    }
+
+    if (foodsTableHead && foodsTableBody && foodsStatus) {
+        loadFoods();
+    }
+
+    applyDominantColorsFromStorage();
+    initDominantColorPickers();
+
+    if (foodsFdcForm && foodsFdcInput) {
+        function createFoodFromFdcId(fdcId) {
+            return fetch(`/api/foods/create_food_from_fdcid/${encodeURIComponent(fdcId)}`, {
+                method: "POST",
+            }).then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.text();
+            });
+        }
+
+        function updateFoodFromFdcId(fdcId) {
+            return fetch(`/api/foods/update_food_from_fdcid/${encodeURIComponent(fdcId)}`, {
+                method: "PUT",
+            }).then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.text();
+            });
+        }
+
+        foodsFdcForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            const fdcId = Number(foodsFdcInput.value);
+            if (!Number.isFinite(fdcId) || fdcId <= 0) {
+                alert("Please enter a valid FDC ID.");
+                return;
+            }
+            foodsFdcForm.querySelector("button[type='submit']").disabled = true;
+            fetch("/api/foods")
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Request failed with ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((foods) => {
+                    const exists = Array.isArray(foods)
+                        ? foods.some((food) => Number(food?.fdc_id) === fdcId)
+                        : false;
+                    return exists ? updateFoodFromFdcId(fdcId) : createFoodFromFdcId(fdcId);
+                })
+                .then((response) => {
+                    alert(response);
+                    foodsFdcInput.value = "";
+                    loadFoods();
+                })
+                .catch((error) => {
+                    alert(`Failed to add/update food: ${error.message}`);
+                })
+                .finally(() => {
+                    const submitButton = foodsFdcForm.querySelector("button[type='submit']");
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                    }
+                });
+        });
+    }
+
+    const foodsEditForm = document.getElementById("foods-edit-form");
+    const foodsEditFields = document.getElementById("foods-edit-fields");
+    const foodsEditStatus = document.getElementById("foods-edit-status");
+    let foodsEditOriginal = new Map();
+
+    function parseFdcIdFromPath() {
+        const match = window.location.pathname.match(/\/ui\/foods\/edit\/(\d+)/);
+        if (!match) {
+            return null;
+        }
+        const value = Number(match[1]);
+        return Number.isFinite(value) ? value : null;
+    }
+
+    function getEditInputValue(input) {
+        if (input.dataset.type === "number") {
+            const num = Number(input.value);
+            return Number.isFinite(num) ? num : 0;
+        }
+        return input.value;
+    }
+
+    function updateEditSaveState() {
+        if (!foodsEditForm || !foodsEditFields) {
+            return;
+        }
+        const submitButton = foodsEditForm.querySelector("button[type='submit']");
+        if (!submitButton) {
+            return;
+        }
+        const inputs = foodsEditFields.querySelectorAll("input[data-field]");
+        const hasChanges = Array.from(inputs).some((input) => {
+            const field = input.dataset.field;
+            if (!field || field === "fdc_id") {
+                return false;
+            }
+            const current = getEditInputValue(input);
+            const original = foodsEditOriginal.get(field);
+            return current !== original;
+        });
+        submitButton.disabled = !hasChanges;
+    }
+
+    function renderFoodsEditForm(food) {
+        if (!foodsEditFields) {
+            return;
+        }
+        foodsEditFields.innerHTML = "";
+        foodsEditOriginal = new Map();
+        Object.keys(food || {}).forEach((key) => {
+            const value = food[key];
+            const isNumber = typeof value === "number";
+            foodsEditOriginal.set(key, isNumber ? value : (value ?? ""));
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "col-12 col-md-6";
+
+            const label = document.createElement("label");
+            label.className = "form-label";
+            label.textContent = key;
+
+            const input = document.createElement("input");
+            input.className = "form-control";
+            input.dataset.field = key;
+            input.dataset.type = isNumber ? "number" : "text";
+            input.value = value ?? "";
+
+            if (isNumber) {
+                input.type = "number";
+                input.step = "0.01";
+            } else {
+                input.type = "text";
+            }
+
+            if (key === "fdc_id") {
+                input.readOnly = true;
+            }
+
+            input.addEventListener("input", () => {
+                updateEditSaveState();
+            });
+
+            wrapper.appendChild(label);
+            wrapper.appendChild(input);
+            foodsEditFields.appendChild(wrapper);
+        });
+        updateEditSaveState();
+    }
+
+    if (foodsEditForm && foodsEditFields && foodsEditStatus) {
+        const fdcId = parseFdcIdFromPath();
+        if (!fdcId) {
+            foodsEditStatus.textContent = "Missing FDC ID in the URL.";
+        } else {
+            foodsEditStatus.textContent = "Loading food details...";
+            fetch(`/api/foods/${encodeURIComponent(fdcId)}`)
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Request failed with ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((food) => {
+                    renderFoodsEditForm(food);
+                    foodsEditStatus.textContent = "Edit the fields and save your changes.";
+                })
+                .catch((error) => {
+                    foodsEditStatus.textContent = `Failed to load food: ${error.message}`;
+                    updateEditSaveState();
+                });
+
+            foodsEditForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+                const inputs = foodsEditFields.querySelectorAll("input[data-field]");
+                const payload = {};
+                inputs.forEach((input) => {
+                    const field = input.dataset.field;
+                    if (!field) {
+                        return;
+                    }
+                    payload[field] = getEditInputValue(input);
+                });
+                delete payload.fdc_id;
+
+                foodsEditForm.querySelector("button[type='submit']").disabled = true;
+                fetch(`/api/foods/${encodeURIComponent(fdcId)}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                })
+                    .then((response) => {
+                        if (!response.ok) {
+                            throw new Error(`Request failed with ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(() => {
+                        alert("Food update was successful.");
+                        foodsEditOriginal = new Map();
+                        inputs.forEach((input) => {
+                            const field = input.dataset.field;
+                            if (!field) {
+                                return;
+                            }
+                            foodsEditOriginal.set(field, getEditInputValue(input));
+                        });
+                    })
+                    .catch((error) => {
+                        alert(`Failed to update food: ${error.message}`);
+                    })
+                    .finally(() => {
+                        const submitButton = foodsEditForm.querySelector("button[type='submit']");
+                        if (submitButton) {
+                            updateEditSaveState();
+                        }
+                    });
+            });
+        }
     }
 
     const dietItemsHead = document.getElementById("diet-items-head");
@@ -128,16 +654,101 @@ document.addEventListener("DOMContentLoaded", () => {
     const dietItemsStatus = document.getElementById("diet-items-status");
     const dietItemsSaveAll = document.getElementById("diet-items-save-all");
     const dietItemsAdd = document.getElementById("diet-items-add");
+    const dietItemsDeleteAll = document.getElementById("diet-items-delete-all");
     if (!dietItemsHead || !dietItemsBody || !dietItemsStatus || !dietItemsSaveAll || !dietItemsAdd) return;
+    const dietItemsTable = dietItemsBody.closest("table");
 
     const params = new URLSearchParams(window.location.search);
-    const dietName = params.get("diet_name");
+    let dietName = params.get("diet_name");
     if (!dietName) {
         dietItemsStatus.textContent = "Missing diet_name in the URL.";
         return;
     }
 
     dietItemsStatus.textContent = `Loading ${dietName} items...`;
+
+    const dietNameEditor = document.getElementById("diet-name-editor");
+    const dietNameHeading = document.getElementById("diet-name-heading");
+    const dietNameInput = document.getElementById("diet-name-input");
+
+    function setDietNameEditing(isEditing) {
+        if (!dietNameEditor) return;
+        dietNameEditor.classList.toggle("is-editing", isEditing);
+        if (isEditing && dietNameInput) {
+            dietNameInput.focus();
+            dietNameInput.select();
+        }
+    }
+
+    function syncDietNameDisplay(name) {
+        if (dietNameHeading) {
+            dietNameHeading.textContent = name;
+        }
+        if (dietNameInput) {
+            dietNameInput.value = name;
+        }
+    }
+
+    if (dietNameEditor && dietNameHeading && dietNameInput) {
+        dietNameHeading.addEventListener("click", () => {
+            setDietNameEditing(true);
+        });
+
+        dietNameInput.addEventListener("keydown", (event) => {
+            if (event.key === "Enter") {
+                dietNameInput.blur();
+            } else if (event.key === "Escape") {
+                syncDietNameDisplay(dietName);
+                setDietNameEditing(false);
+            }
+        });
+
+        dietNameInput.addEventListener("blur", () => {
+            const newName = dietNameInput.value.trim();
+            if (!newName) {
+                syncDietNameDisplay(dietName);
+                setDietNameEditing(false);
+                return;
+            }
+            if (newName === dietName) {
+                setDietNameEditing(false);
+                return;
+            }
+
+            const payload = {
+                diet_name_old: dietName,
+                diet_name_new: newName,
+            };
+
+            dietItemsStatus.textContent = "Saving diet name...";
+            fetch("/api/diet/name_only", {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Request failed with ${response.status}`);
+                    }
+                    dietName = newName;
+                    syncDietNameDisplay(newName);
+                    params.set("diet_name", newName);
+                    const newUrl = `${window.location.pathname}?${params.toString()}`;
+                    window.history.replaceState({}, "", newUrl);
+                    loadDietSidebar();
+                    return loadDietItems();
+                })
+                .catch((error) => {
+                    dietItemsStatus.textContent = `Failed to save diet name: ${error.message}`;
+                    syncDietNameDisplay(dietName);
+                })
+                .finally(() => {
+                    setDietNameEditing(false);
+                });
+        });
+    }
 
     let activeEditRow = null;
 
@@ -147,7 +758,56 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         activeEditRow = row;
         row.classList.add("is-editing");
+        if (dietItemsTable) {
+            dietItemsTable.classList.add("is-editing");
+        }
     }
+
+    function clearEditingRow() {
+        if (activeEditRow) {
+            activeEditRow.classList.remove("is-editing");
+            activeEditRow = null;
+        }
+        if (dietItemsTable) {
+            dietItemsTable.classList.remove("is-editing");
+        }
+    }
+
+    document.addEventListener("click", (event) => {
+        if (!activeEditRow) {
+            return;
+        }
+        if (event.target.closest("#diet-items-body tr")) {
+            return;
+        }
+        clearEditingRow();
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") {
+            return;
+        }
+        if (!activeEditRow) {
+            return;
+        }
+        clearEditingRow();
+    });
+
+    function closeColorMenus(target) {
+        document.querySelectorAll(".color-dropdown.is-open").forEach((menu) => {
+            if (target && menu.contains(target)) {
+                return;
+            }
+            menu.classList.remove("is-open");
+        });
+    }
+
+    document.addEventListener("click", (event) => {
+        if (event.target.closest(".color-dropdown")) {
+            return;
+        }
+        closeColorMenus();
+    });
 
     let lastLoadedItems = [];
     let foodsLoadPromise = null;
@@ -198,6 +858,38 @@ document.addEventListener("DOMContentLoaded", () => {
         return foodsLoadPromise;
     }
 
+    function deleteDietItem(row) {
+        if (!row) {
+            return;
+        }
+        const name = row.querySelector(".name-col .cell-value")?.textContent?.trim() || "this item";
+        const payload = {
+            diet_name: row.dataset.dietName ?? dietName,
+            fdc_id: Number(row.dataset.originalFdcId),
+            quantity: Number(row.dataset.originalQuantity),
+            sort_order: Number(row.dataset.originalSortOrder),
+            delete_all: false,
+        };
+        dietItemsStatus.textContent = "Deleting diet item...";
+        fetch("/api/diet", {
+            method: "DELETE",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(() => loadDietItems())
+            .catch((error) => {
+                dietItemsStatus.textContent = `Failed to delete item: ${error.message}`;
+            });
+    }
+
     function loadDietItems() {
         dietItemsStatus.textContent = `Loading ${dietName} items...`;
         dietItemsSaveAll.disabled = true;
@@ -228,7 +920,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 const rawColumns = Object.keys(items[0] || {});
-                const columns = [];
+                const columns = ["delete_action"];
                 if (rawColumns.includes("color")) {
                     columns.push("color");
                 }
@@ -256,11 +948,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 const headRow = document.createElement("tr");
                 columns.forEach((col) => {
                     const th = document.createElement("th");
-                    th.textContent = col;
+                    th.textContent = col === "delete_action" ? "" : col;
                     if (col === "Name") {
                         th.classList.add("name-col");
                     }
-                    if (col === "diet_name" || col === "fdc_id" || col === "sort_order") {
+                    if (col === "color") {
+                        th.classList.add("color-col");
+                    }
+                    if (col === "delete_action") {
+                        th.classList.add("delete-col");
+                    }
+                    if (col === "diet_name" || col === "fdc_id" || col === "sort_order" || col === "Energy kJ") {
                         th.classList.add("is-hidden-col");
                     }
                     headRow.appendChild(th);
@@ -296,11 +994,25 @@ document.addEventListener("DOMContentLoaded", () => {
                     columns.forEach((col) => {
                         const cell = document.createElement("td");
                         const value = item[col];
-                        if (col === "diet_name" || col === "fdc_id" || col === "sort_order") {
+                        if (col === "diet_name" || col === "fdc_id" || col === "sort_order" || col === "Energy kJ") {
                             cell.classList.add("is-hidden-col");
                         }
+                        if (col === "color") {
+                            cell.classList.add("color-col");
+                        }
 
-                        if (col === "Name") {
+                        if (col === "delete_action") {
+                            cell.classList.add("delete-col");
+                            const deleteBtn = document.createElement("button");
+                            deleteBtn.type = "button";
+                            deleteBtn.className = "btn btn-outline-danger btn-sm";
+                            deleteBtn.textContent = "Delete";
+                            deleteBtn.addEventListener("click", (event) => {
+                                event.stopPropagation();
+                                deleteDietItem(row);
+                            });
+                            cell.appendChild(deleteBtn);
+                        } else if (col === "Name") {
                             cell.classList.add("name-col");
                             const display = document.createElement("span");
                             display.className = "cell-value";
@@ -399,9 +1111,23 @@ document.addEventListener("DOMContentLoaded", () => {
                             input.value = value ?? "";
                             input.dataset.column = col;
 
-                            const picker = document.createElement("div");
-                            picker.className = "color-picker cell-input";
-                            DIET_COLOR_SWATCHES.forEach((color) => {
+                            const dropdown = document.createElement("div");
+                            dropdown.className = "color-dropdown cell-input";
+
+                            const toggle = document.createElement("button");
+                            toggle.type = "button";
+                            toggle.className = "btn btn-sm color-toggle";
+                            toggle.innerHTML = '<i class="bi bi-eyedropper"></i>';
+                            toggle.addEventListener("click", (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                dropdown.classList.toggle("is-open");
+                                closeColorMenus(dropdown);
+                            });
+
+                            const menu = document.createElement("div");
+                            menu.className = "color-menu";
+                            getDietColorSwatches().forEach((color) => {
                                 const swatch = document.createElement("span");
                                 swatch.className = "color-swatch";
                                 swatch.style.backgroundColor = color;
@@ -410,7 +1136,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                 }
                                 swatch.addEventListener("click", () => {
                                     const isSelected = swatch.classList.contains("is-selected");
-                                    picker.querySelectorAll(".color-swatch").forEach((node) => {
+                                    menu.querySelectorAll(".color-swatch").forEach((node) => {
                                         node.classList.remove("is-selected");
                                     });
                                     if (isSelected) {
@@ -424,13 +1150,21 @@ document.addEventListener("DOMContentLoaded", () => {
                                         row.style.backgroundColor = toRgba(color, 0.5);
                                     }
                                     updateSaveAllState();
+                                    dropdown.classList.remove("is-open");
                                 });
-                                picker.appendChild(swatch);
+                                menu.appendChild(swatch);
                             });
+
+                            dropdown.appendChild(toggle);
+                            dropdown.appendChild(menu);
+
+                            const colorActions = document.createElement("div");
+                            colorActions.className = "d-flex align-items-center gap-2";
+                            colorActions.appendChild(dropdown);
 
                             cell.appendChild(display);
                             cell.appendChild(input);
-                            cell.appendChild(picker);
+                            cell.appendChild(colorActions);
                         } else if (col === "quantity" || col === "sort_order") {
                             const display = document.createElement("span");
                             display.className = "cell-value";
@@ -467,14 +1201,33 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (rawColumns.includes("Energy kcal")) {
                     const totalsRow = document.createElement("tr");
                     totalsRow.classList.add("totals-row");
-                    columns.forEach((col, index) => {
+                    const highlightTotals = new Set([
+                        "Price",
+                        "Energy kcal",
+                        "Protein g",
+                        "Total lipid (fat) g",
+                        "Carbohydrate, by difference g",
+                    ]);
+                    const totalsColorClass = {
+                        "Protein g": "totals-protein",
+                        "Total lipid (fat) g": "totals-fat",
+                        "Carbohydrate, by difference g": "totals-carb",
+                    };
+
+                    columns.forEach((col) => {
                         const cell = document.createElement("td");
-                        if (col === "diet_name" || col === "fdc_id" || col === "sort_order") {
+                        if (col === "diet_name" || col === "fdc_id" || col === "sort_order" || col === "Energy kJ") {
                             cell.classList.add("is-hidden-col");
                         }
-                        if (index === 0) {
+                        if (col === "delete_action") {
+                            cell.classList.add("delete-col");
+                            cell.textContent = "";
+                        } else if (col === "color") {
+                            cell.classList.add("color-col");
+                            cell.textContent = "";
+                        } else if (col === "Name") {
                             cell.textContent = "Totals";
-                        } else if (col === "Name" || col === "quantity" || col === "color" || col === "Unit") {
+                        } else if (col === "quantity" || col === "Unit") {
                             cell.textContent = "";
                         } else {
                             let total = 0;
@@ -490,7 +1243,31 @@ document.addEventListener("DOMContentLoaded", () => {
                                     total += Number(fieldValue);
                                 }
                             });
-                            cell.textContent = total.toFixed(2);
+                            const roundedTotal = total.toFixed(0);
+                            if (col === "Price") {
+                                cell.textContent = `$${roundedTotal}`;
+                            } else if (col === "Energy kcal") {
+                                cell.textContent = `${roundedTotal} ⚡`;
+                            } else if (
+                                col === "Protein g" ||
+                                col === "Carbohydrate, by difference g" ||
+                                col === "Total lipid (fat) g"
+                            ) {
+                                const kcalPerGram = col === "Total lipid (fat) g" ? 9 : 4;
+                                const percent = Math.round((total * kcalPerGram) / 2000 * 100);
+                                cell.innerHTML = `${roundedTotal}<br>(${percent}%)`;
+                            } else {
+                                cell.textContent = roundedTotal;
+                            }
+                            if (highlightTotals.has(col)) {
+                                const colorClass = totalsColorClass[col];
+                                if (colorClass) {
+                                    cell.classList.add(colorClass);
+                                    cell.classList.add("totals-highlight");
+                                } else {
+                                    cell.classList.add("totals-highlight");
+                                }
+                            }
                         }
                         totalsRow.appendChild(cell);
                     });
@@ -610,7 +1387,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 original_sort_order: Number(row.dataset.originalSortOrder),
             };
 
-            return fetch(`/api/diet/${encodeURIComponent(payload.diet_name)}`, {
+            return fetch("/api/diet", {
                 method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
@@ -677,6 +1454,38 @@ document.addEventListener("DOMContentLoaded", () => {
                 dietItemsAdd.disabled = false;
             });
     });
+
+    if (dietItemsDeleteAll) {
+        dietItemsDeleteAll.addEventListener("click", () => {
+            if (!confirm(`Delete all items for ${dietName}? This cannot be undone.`)) {
+                return;
+            }
+            dietItemsDeleteAll.disabled = true;
+            dietItemsStatus.textContent = "Deleting all items...";
+            fetch("/api/diet", {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ diet_name: dietName, delete_all: true }),
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Request failed with ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(() => {
+                    window.location.href = "/";
+                })
+                .catch((error) => {
+                    dietItemsStatus.textContent = `Failed to delete all items: ${error.message}`;
+                })
+                .finally(() => {
+                    dietItemsDeleteAll.disabled = false;
+                });
+        });
+    }
 
     function toRgba(color, alpha) {
         if (typeof color !== "string" || !color.trim()) {
