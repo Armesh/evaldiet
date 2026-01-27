@@ -26,15 +26,15 @@
                   .table > :not(caption) > * > * {
                     background-color: inherit !important;
                   }
-                  .foods-table tbody tr.food-dominant-protein {
+                  #foods-table tbody tr.food-dominant-protein {
                     background-color: var(--food-dominant-protein);
                   }
 
-                  .foods-table tbody tr.food-dominant-carb {
+                  #foods-table tbody tr.food-dominant-carb {
                     background-color: var(--food-dominant-carb);
                   }
 
-                  .foods-table tbody tr.food-dominant-fat {
+                  #foods-table tbody tr.food-dominant-fat {
                     background-color: var(--food-dominant-fat);
                   }
                 </style>
@@ -95,7 +95,7 @@
                   <div class="card-body">
                     <div id="foods-status" class="mb-2 text-muted">Loading foods...</div>
                     <div class="table-responsive">
-                      <table class="table table-bordered table-hover align-middle foods-table">
+                      <table id="foods-table" class="table table-bordered table-hover align-middle">
                         <thead id="foods-table-head"></thead>
                         <tbody id="foods-table-body"></tbody>
                       </table>
