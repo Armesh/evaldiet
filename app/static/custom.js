@@ -64,33 +64,56 @@ document.addEventListener("DOMContentLoaded", () => {
         sync_toggle_button_html_with_theme(); //Sync theme toggle button in sidebar upon page load
     }
 
-    const currentPath = normalizePath(window.location.pathname);
+    function setActiveNavLinks() {
+        const currentPath = normalizePath(window.location.pathname);
+        const currentParams = new URLSearchParams(window.location.search);
+        const currentDietName = currentParams.get("diet_name");
 
-    document.querySelectorAll("a[href]").forEach((link) => {
-        const href = link.getAttribute("href");
-        if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
-
-        let linkPath;
-        try {
-            linkPath = normalizePath(new URL(href, window.location.origin).pathname);
-        } catch {
-            return;
-        }
-        const isExact = linkPath === currentPath;
-        const isPrefix = linkPath !== "/" && currentPath.startsWith(linkPath + "/");
-
-        if (isExact || isPrefix) {
-            link.classList.add("active");
-
+        document.querySelectorAll("a[href]").forEach((link) => {
+            link.classList.remove("active");
             const navItem = link.closest(".nav-item");
-            if (navItem) navItem.classList.add("menu-open");
+            if (navItem) navItem.classList.remove("menu-open");
+        });
 
-            const parentLink = navItem?.closest(".nav-treeview")?.previousElementSibling;
-            if (parentLink?.classList?.contains("nav-link")) {
-            parentLink.classList.add("active");
+        document.querySelectorAll("a[href]").forEach((link) => {
+            const href = link.getAttribute("href");
+            if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+
+            let linkUrl;
+            try {
+                linkUrl = new URL(href, window.location.origin);
+            } catch {
+                return;
             }
-        }
-    });
+            const linkPath = normalizePath(linkUrl.pathname);
+            const isExact = linkPath === currentPath;
+            const isPrefix = linkPath !== "/" && currentPath.startsWith(linkPath + "/");
+
+            let isActive = isExact || isPrefix;
+            if (linkPath === "/ui/diets") {
+                const linkDietName = linkUrl.searchParams.get("diet_name");
+                if (currentDietName) {
+                    isActive = linkDietName === currentDietName;
+                } else {
+                    isActive = !linkDietName && isExact;
+                }
+            }
+
+            if (isActive) {
+                link.classList.add("active");
+
+                const navItem = link.closest(".nav-item");
+                if (navItem) navItem.classList.add("menu-open");
+
+                const parentLink = navItem?.closest(".nav-treeview")?.previousElementSibling;
+                if (parentLink?.classList?.contains("nav-link")) {
+                    parentLink.classList.add("active");
+                }
+            }
+        });
+    }
+
+    setActiveNavLinks();
 
     function normalizePath(path) {
         if (!path) return "/";
@@ -154,6 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log(name);
                 });
                 loadingItem.style.display = "none";
+                setActiveNavLinks();
             })
             .catch(() => {
                 const errorLabel = loadingItem.querySelector("p");
