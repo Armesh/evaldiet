@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     const body = document.body;
     body.setAttribute("data-bs-theme", localStorage.getItem("theme"));
+    document.documentElement.style.colorScheme = localStorage.getItem("theme");
 
     // Theme switch button
     const themeToggleBtn = document.getElementById("theme-toggle");
@@ -45,10 +46,17 @@ document.addEventListener("DOMContentLoaded", () => {
             const opposite = body.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
             body.setAttribute("data-bs-theme", opposite);
             localStorage.setItem("theme", opposite);
+            // 🔑 tell the browser its color scheme
+            document.documentElement.style.colorScheme = opposite;
             
             sync_toggle_button_html_with_theme();
             if (typeof loadDietItems === "function") {
-                loadDietItems();
+                const isDietPage = window.location.pathname === "/ui/diets";
+                const params = new URLSearchParams(window.location.search);
+                const hasDietName = params.has("diet_name") && params.get("diet_name");
+                if (isDietPage && hasDietName) {
+                    loadDietItems();
+                }
             }
         });
         // Theme switch button end
@@ -327,10 +335,14 @@ document.addEventListener("DOMContentLoaded", () => {
         columns.forEach((col) => {
             const th = document.createElement("th");
             th.textContent = col;
+            if (col !== "fdc_id" && col !== "Name") {
+                th.setAttribute("data-searchable", "false");
+            }
             headRow.appendChild(th);
         });
         const actionsTh = document.createElement("th");
         actionsTh.textContent = "Actions";
+        actionsTh.setAttribute("data-searchable", "false");
         headRow.appendChild(actionsTh);
         foodsTableHead.innerHTML = "";
         foodsTableHead.appendChild(headRow);
@@ -395,6 +407,20 @@ document.addEventListener("DOMContentLoaded", () => {
         foodsTableBody.innerHTML = "";
         foodsTableBody.appendChild(fragment);
         foodsStatus.textContent = `Loaded ${foods.length} foods.`;
+
+        const tableEl = document.getElementById("foods-table");
+        if (tableEl?._datatable) {
+            tableEl._datatable.destroy();
+        }
+        if (tableEl) {
+            tableEl._datatable = new simpleDatatables.DataTable(tableEl, {
+                searchable: true,
+                fixedHeight: true,
+                perPage: 10000,
+            });
+        }
+        return tableEl?._datatable;
+
     }
 
     function loadFoods() {
