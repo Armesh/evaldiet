@@ -364,10 +364,15 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             headRow.appendChild(th);
         });
-        const actionsTh = document.createElement("th");
-        actionsTh.textContent = "Actions";
-        actionsTh.setAttribute("data-searchable", "false");
-        headRow.appendChild(actionsTh);
+        const editTh = document.createElement("th");
+        editTh.textContent = "Edit";
+        editTh.setAttribute("data-searchable", "false");
+        headRow.appendChild(editTh);
+
+        const deleteTh = document.createElement("th");
+        deleteTh.textContent = "Delete";
+        deleteTh.setAttribute("data-searchable", "false");
+        headRow.appendChild(deleteTh);
         foodsTableHead.innerHTML = "";
         foodsTableHead.appendChild(headRow);
 
@@ -385,7 +390,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 row.appendChild(cell);
             });
 
-            const actionCell = document.createElement("td");
+            const editCell = document.createElement("td");
             const editLink = document.createElement("a");
             editLink.className = "btn btn-sm btn-outline-primary me-2";
             editLink.textContent = "Edit";
@@ -395,35 +400,18 @@ document.addEventListener("DOMContentLoaded", () => {
                 editLink.href = "#";
                 editLink.classList.add("disabled");
             }
-            actionCell.appendChild(editLink);
+            editCell.appendChild(editLink);
+            row.appendChild(editCell);
 
+            const deleteCell = document.createElement("td");
             const deleteBtn = document.createElement("button");
             deleteBtn.type = "button";
-            deleteBtn.className = "btn btn-sm btn-danger";
+            deleteBtn.className = "btn btn-outline-danger btn-sm";
             deleteBtn.textContent = "Delete";
-            deleteBtn.addEventListener("click", () => {
-                const name = food?.Name ?? "this food";
-                const fdcId = food?.fdc_id;
-                if (fdcId == null) {
-                    alert("Missing FDC ID for this food.");
-                    return;
-                }
-                fetch(`/api/foods/${encodeURIComponent(fdcId)}`, { method: "DELETE" })
-                    .then((response) => {
-                        if (!response.ok) {
-                            throw new Error(`Request failed with ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(() => {
-                        loadFoods();
-                    })
-                    .catch((error) => {
-                        alert(`Failed to delete: ${error.message}`);
-                    });
-            });
-            actionCell.appendChild(deleteBtn);
-            row.appendChild(actionCell);
+            deleteBtn.dataset.fdcId = food?.fdc_id ?? "";
+            deleteBtn.dataset.foodName = food?.Name ?? "";
+            deleteCell.appendChild(deleteBtn);
+            row.appendChild(deleteCell);
 
             fragment.appendChild(row);
         });
@@ -469,8 +457,48 @@ document.addEventListener("DOMContentLoaded", () => {
             });
     }
 
+    function deleteFood(fdcId, foodName = "") {
+        const id = String(fdcId || "").trim();
+        if (!id) {
+            alert("Delete failed: missing FDC ID.");
+            return;
+        }
+        if (!confirm(`Delete food ${id}${foodName ? ` (${foodName})` : ""}? This cannot be undone.`)) {
+            return;
+        }
+        fetch(`/api/foods/${encodeURIComponent(id)}`, {
+            method: "DELETE",
+            credentials: "same-origin",
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(() => {
+                alert(`Deleted food ${id}${foodName ? ` (${foodName})` : ""}.`);
+                window.location.reload();
+            })
+            .catch((error) => {
+                alert(`Failed to delete food ${id}${foodName ? ` (${foodName})` : ""}: ${error.message}`);
+            });
+    }
+
     if (foodsTableHead && foodsTableBody && foodsStatus) {
         loadFoods();
+    }
+
+    const foodsTable = document.getElementById("foods-table");
+    if (foodsTable && !foodsTable._deleteHandlerAttached) {
+        foodsTable.addEventListener("click", (event) => {
+            const target = event.target?.closest?.("button.btn.btn-outline-danger.btn-sm");
+            if (!target || !foodsTable.contains(target)) {
+                return;
+            }
+            deleteFood(target.dataset.fdcId || "", target.dataset.foodName || "");
+        });
+        foodsTable._deleteHandlerAttached = true;
     }
 
     applyDominantColorsFromStorage();
@@ -523,7 +551,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 .then((response) => {
                     alert(response);
                     foodsFdcInput.value = "";
-                    loadFoods();
+                    window.location.reload();
                 })
                 .catch((error) => {
                     alert(`Failed to add/update food: ${error.message}`);
@@ -702,11 +730,97 @@ document.addEventListener("DOMContentLoaded", () => {
     const dietItemsHead = document.getElementById("diet-items-head");
     const dietItemsBody = document.getElementById("diet-items-body");
     const dietItemsStatus = document.getElementById("diet-items-status");
+    const dietItemsHash = document.getElementById("diet-items-hash");
     const dietItemsSaveAll = document.getElementById("diet-items-save-all");
     const dietItemsAdd = document.getElementById("diet-items-add");
     const dietItemsDeleteAll = document.getElementById("diet-items-delete-all");
-    if (!dietItemsHead || !dietItemsBody || !dietItemsStatus || !dietItemsSaveAll || !dietItemsAdd) return;
+    const dietAutoSaveToast = document.getElementById("diet-auto-save-toast");
+    if (!dietItemsHead || !dietItemsBody || !dietItemsStatus || !dietItemsAdd) return;
     const dietItemsTable = dietItemsBody.closest("table");
+    let autoSaveTimer = null;
+    let saveInFlight = false;
+    let autoSaveQueued = false;
+    let autoSaveToastTimer = null;
+
+    async function sha1Hex(str) {
+        const encoded = new TextEncoder().encode(str);
+        const digest = await crypto.subtle.digest("SHA-1", encoded);
+        return Array.from(new Uint8Array(digest))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
+    }
+
+    function getCurrentDietSnapshot() {
+        const rows = Array.from(dietItemsBody.querySelectorAll("tr")).filter(
+            (row) => !row.classList.contains("totals-row")
+        );
+        const items = rows.map((row) => {
+            const inputs = row.querySelectorAll("input[data-column]");
+            const data = {
+                diet_name: row.dataset.dietName ?? dietName,
+                fdc_id: "",
+                quantity: "",
+                sort_order: "",
+                color: "",
+            };
+            inputs.forEach((input) => {
+                data[input.dataset.column] = input.value ?? "";
+            });
+            return data;
+        });
+        items.sort((a, b) => {
+            const aSort = Number(a.sort_order) || 0;
+            const bSort = Number(b.sort_order) || 0;
+            if (aSort !== bSort) {
+                return aSort - bSort;
+            }
+            return String(a.fdc_id).localeCompare(String(b.fdc_id));
+        });
+        return items;
+    }
+
+    async function updateDietHashDisplay() {
+        if (!dietItemsHash) {
+            return;
+        }
+        const snapshot = getCurrentDietSnapshot();
+        if (snapshot.length === 0) {
+            dietItemsHash.textContent = "";
+            return;
+        }
+        const hash = await sha1Hex(JSON.stringify(snapshot));
+        dietItemsHash.textContent = `SHA-1: ${hash.slice(0, 10)}`;
+    }
+
+    function setSaveAllEnabled(enabled) {
+        if (!dietItemsSaveAll) {
+            return;
+        }
+        dietItemsSaveAll.disabled = !enabled;
+    }
+
+    function showAutoSaveToast() {
+        if (!dietAutoSaveToast) {
+            return;
+        }
+        dietAutoSaveToast.classList.add("is-visible");
+        if (autoSaveToastTimer) {
+            clearTimeout(autoSaveToastTimer);
+        }
+        autoSaveToastTimer = setTimeout(() => {
+            dietAutoSaveToast.classList.remove("is-visible");
+        }, 1600);
+    }
+
+    function scheduleAutoSave(delay = 900) {
+        if (autoSaveTimer) {
+            clearTimeout(autoSaveTimer);
+        }
+        autoSaveTimer = setTimeout(() => {
+            autoSaveTimer = null;
+            autoSaveDirtyRows();
+        }, delay);
+    }
 
     const params = new URLSearchParams(window.location.search);
     let dietName = params.get("diet_name");
@@ -940,12 +1054,85 @@ document.addEventListener("DOMContentLoaded", () => {
             });
     }
 
+    function collectDirtyRows() {
+        return Array.from(dietItemsBody.querySelectorAll("tr")).filter((row) => rowHasChanges(row));
+    }
+
+    function buildDietUpdatePayload(row) {
+        const inputs = row.querySelectorAll("input[data-column]");
+        const updated = {};
+        inputs.forEach((input) => {
+            updated[input.dataset.column] = input.value;
+        });
+
+        return {
+            diet_name: row.dataset.dietName ?? dietName,
+            fdc_id: Number(updated.fdc_id),
+            quantity: Number(updated.quantity),
+            sort_order: Number(updated.sort_order),
+            color: updated.color || null,
+            original_fdc_id: Number(row.dataset.originalFdcId),
+            original_quantity: Number(row.dataset.originalQuantity),
+            original_sort_order: Number(row.dataset.originalSortOrder),
+        };
+    }
+
+    function saveDietRows(rows) {
+        if (!rows.length) {
+            return Promise.resolve();
+        }
+        const requests = rows.map((row) => {
+            const payload = buildDietUpdatePayload(row);
+            return fetch("/api/diet", {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(payload),
+            });
+        });
+
+        return Promise.all(requests).then((responses) => {
+            const failed = responses.filter((response) => !response.ok);
+            if (failed.length > 0) {
+                throw new Error(`Failed to save ${failed.length} row(s).`);
+            }
+            return loadDietItems();
+        });
+    }
+
+    function autoSaveDirtyRows() {
+        const dirtyRows = collectDirtyRows();
+        if (dirtyRows.length === 0) {
+            return;
+        }
+        if (saveInFlight) {
+            autoSaveQueued = true;
+            return;
+        }
+        saveInFlight = true;
+        saveDietRows(dirtyRows)
+            .then(() => {
+                showAutoSaveToast();
+            })
+            .catch((error) => {
+                dietItemsStatus.textContent = `Failed to auto-save rows: ${error.message}`;
+            })
+            .finally(() => {
+                saveInFlight = false;
+                if (autoSaveQueued) {
+                    autoSaveQueued = false;
+                    scheduleAutoSave(200);
+                }
+            });
+    }
+
     function loadDietItems() {
         dietItemsStatus.textContent = `Loading ${dietName} items...`;
-        dietItemsSaveAll.disabled = true;
+        setSaveAllEnabled(false);
         dietItemsAdd.disabled = true;
         activeEditRow = null;
-        ensureFoodsLoaded()
+        return ensureFoodsLoaded()
             .then(() => fetch(`/api/diets/${encodeURIComponent(dietName)}/nutrition`))
             .then((response) => {
                 if (!response.ok) {
@@ -964,7 +1151,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     dietItemsStatus.textContent = `No items found for ${dietName}.`;
                     dietItemsHead.innerHTML = "";
                     dietItemsBody.innerHTML = "";
-                    dietItemsSaveAll.disabled = true;
+                    setSaveAllEnabled(false);
                     dietItemsAdd.disabled = false;
                     return;
                 }
@@ -990,7 +1177,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     dietItemsStatus.textContent = `No data fields found for ${dietName}.`;
                     dietItemsHead.innerHTML = "";
                     dietItemsBody.innerHTML = "";
-                    dietItemsSaveAll.disabled = true;
+                    setSaveAllEnabled(false);
                     dietItemsAdd.disabled = false;
                     return;
                 }
@@ -1114,6 +1301,8 @@ document.addEventListener("DOMContentLoaded", () => {
                                         }
                                         options.style.display = "none";
                                         updateSaveAllState();
+                                        updateDietHashDisplay();
+                                        scheduleAutoSave();
                                     });
                                     options.appendChild(option);
                                 });
@@ -1200,6 +1389,8 @@ document.addEventListener("DOMContentLoaded", () => {
                                         row.style.backgroundColor = toRgba(color, 0.5);
                                     }
                                     updateSaveAllState();
+                                    updateDietHashDisplay();
+                                    scheduleAutoSave();
                                     dropdown.classList.remove("is-open");
                                 });
                                 menu.appendChild(swatch);
@@ -1327,6 +1518,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 dietItemsBody.innerHTML = "";
                 dietItemsBody.appendChild(fragment);
                 dietItemsStatus.textContent = `Loaded ${items.length} items for ${dietName}.`;
+                updateDietHashDisplay();
 
                 if (window.Sortable) {
                     if (dietItemsBody._sortable) {
@@ -1350,6 +1542,8 @@ document.addEventListener("DOMContentLoaded", () => {
                                 }
                             });
                             updateSaveAllState();
+                            updateDietHashDisplay();
+                            scheduleAutoSave(200);
                         },
                     });
                 }
@@ -1358,14 +1552,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 inputs.forEach((input) => {
                     input.addEventListener("input", () => {
                         updateSaveAllState();
+                        updateDietHashDisplay();
+                        scheduleAutoSave();
                     });
                 });
                 updateSaveAllState();
+                updateDietHashDisplay();
                 dietItemsAdd.disabled = false;
             })
             .catch((error) => {
                 dietItemsStatus.textContent = `Failed to load items: ${error.message}`;
-                dietItemsSaveAll.disabled = false;
+                setSaveAllEnabled(true);
                 dietItemsAdd.disabled = false;
             });
     }
@@ -1399,10 +1596,20 @@ document.addEventListener("DOMContentLoaded", () => {
             row.classList.toggle("is-dirty", dirty);
             return dirty;
         });
-        dietItemsSaveAll.disabled = !hasChanges;
+        setSaveAllEnabled(hasChanges);
     }
 
+    if (dietItemsSaveAll) {
     dietItemsSaveAll.addEventListener("click", () => {
+        if (saveInFlight) {
+            dietItemsStatus.textContent = "Save already in progress.";
+            return;
+        }
+        if (autoSaveTimer) {
+            clearTimeout(autoSaveTimer);
+            autoSaveTimer = null;
+        }
+        autoSaveQueued = false;
         const rows = Array.from(dietItemsBody.querySelectorAll("tr"));
         if (rows.length === 0) {
             dietItemsStatus.textContent = "No rows to save.";
@@ -1412,56 +1619,29 @@ document.addEventListener("DOMContentLoaded", () => {
         const dirtyRows = rows.filter((row) => rowHasChanges(row));
         if (dirtyRows.length === 0) {
             dietItemsStatus.textContent = "No changes to save.";
-            dietItemsSaveAll.disabled = true;
+            setSaveAllEnabled(false);
             return;
         }
 
+        saveInFlight = true;
         dietItemsSaveAll.disabled = true;
         dietItemsSaveAll.textContent = "Saving...";
 
-        const requests = dirtyRows.map((row) => {
-            const inputs = row.querySelectorAll("input[data-column]");
-            const updated = {};
-            inputs.forEach((input) => {
-                updated[input.dataset.column] = input.value;
-            });
-
-            const payload = {
-                diet_name: row.dataset.dietName ?? dietName,
-                fdc_id: Number(updated.fdc_id),
-                quantity: Number(updated.quantity),
-                sort_order: Number(updated.sort_order),
-                color: updated.color || null,
-                original_fdc_id: Number(row.dataset.originalFdcId),
-                original_quantity: Number(row.dataset.originalQuantity),
-                original_sort_order: Number(row.dataset.originalSortOrder),
-            };
-
-            return fetch("/api/diet", {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(payload),
-            });
-        });
-
-        Promise.all(requests)
-            .then((responses) => {
-                const failed = responses.filter((response) => !response.ok);
-                if (failed.length > 0) {
-                    throw new Error(`Failed to save ${failed.length} row(s).`);
-                }
-                return loadDietItems();
-            })
+        saveDietRows(dirtyRows)
             .catch((error) => {
                 dietItemsStatus.textContent = `Failed to save rows: ${error.message}`;
             })
             .finally(() => {
+                saveInFlight = false;
                 dietItemsSaveAll.disabled = false;
                 dietItemsSaveAll.textContent = "Save All";
+                if (autoSaveQueued) {
+                    autoSaveQueued = false;
+                    scheduleAutoSave(200);
+                }
             });
     });
+    }
 
     dietItemsAdd.addEventListener("click", () => {
         dietItemsAdd.disabled = true;

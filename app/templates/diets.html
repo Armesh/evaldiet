@@ -158,6 +158,33 @@
           .diet-name-editor .diet-name-display {
             cursor: pointer;
           }
+          .diet-auto-save-toast {
+            position: fixed;
+            left: 1rem;
+            bottom: 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.6rem;
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            color: #d7f5e1;
+            background: rgba(18, 48, 28, 0.95);
+            border: 1px solid rgba(60, 196, 90, 0.7);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateY(8px);
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 1050;
+          }
+          .diet-auto-save-toast.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+          }
+          .diet-auto-save-toast .bi {
+            color: #3cc45a;
+          }
         </style>
         <!--begin::App Content Header-->
         <div class="app-content-header">
@@ -196,10 +223,11 @@
                       <button id="diet-items-add" type="button" class="btn btn-outline-primary btn-sm">
                         Add Item
                       </button>
-                      <button id="diet-items-save-all" type="button" class="btn btn-success btn-sm">
+                      <button id="diet-items-save-all" type="button" class="btn btn-success btn-sm d-none">
                         Save All
                       </button>
                       <div id="diet-items-status" class="text-muted small"></div>
+                      <div id="diet-items-hash" class="text-muted small"></div>
                       <div class="flex-grow-1"></div>
                       <button id="diet-items-delete-all" type="button" class="btn btn-outline-danger btn-sm">
                         Delete All
@@ -219,6 +247,10 @@
           <!--end::Container-->
         </div>
         <!--end::App Content-->
+        <div id="diet-auto-save-toast" class="diet-auto-save-toast" role="status" aria-live="polite">
+          <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+          <span>Updated</span>
+        </div>
       </main>
 
 {% endblock %}
