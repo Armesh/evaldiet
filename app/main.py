@@ -51,7 +51,7 @@ def root(request: Request):
     try:
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
-        cur.execute("SELECT diet_name FROM diets ORDER BY diet_name DESC LIMIT 1")
+        cur.execute("SELECT diet_name FROM diets ORDER BY diet_name ASC LIMIT 1")
         row = cur.fetchone()
         diet_name = row[0] if row else ""
     except Exception as exc:
@@ -66,7 +66,7 @@ def root(request: Request):
 
 @app.get("/ui/diets")
 def diet_details(request: Request, diet_name: str):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("diets.html", {"request": request})
     
 @app.get("/ui/foods")
 def all_foods(request: Request):
@@ -94,7 +94,7 @@ def get_foods(fdc_id: int | None = None):
             cur.execute("SELECT * FROM foods")
             rows = cur.fetchall()
             return [dict(row) for row in rows]
-        cur.execute("SELECT * FROM foods WHERE fdc_id = ?", (fdc_id,))
+        cur.execute("SELECT * FROM foods WHERE fdc_id = ? ORDER BY fdc_id ASC", (fdc_id,))
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Food not found")
