@@ -4,13 +4,13 @@ import string
 import traceback
 import os
 import sqlite3
-from typing import Union, Annotated
+
 import httpx
 from dotenv import load_dotenv
 import signal
 import random
 
-from fastapi import FastAPI, HTTPException, Header, Request, Depends, Response, requests
+from fastapi import FastAPI, HTTPException, Request, Depends, Response, requests, Form
 from fastapi.params import Body
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -40,12 +40,27 @@ def random_alphanumeric(length: int = 6) -> str:
     chars = string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
+def verify_auth_token(request: Request) -> bool:
+    expected_token = os.getenv("EVALDIET_LOGIN_PASSWORD", "goodgooddiets5")
+    auth_token = request.cookies.get("auth_token")
+
+    if auth_token == expected_token:
+        return True
+    else:
+        login_url = "/ui/login"
+        raise HTTPException(
+            status_code=307,
+            detail="Unauthorized",
+            headers={"Location": login_url},
+        )
+
+
 # serve /static/...
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["rand_id"] = random_alphanumeric
 
-@app.get("/")
+@app.get("/", dependencies=[Depends(verify_auth_token)])
 def root(request: Request):
     conn = None
     try:
@@ -64,15 +79,49 @@ def root(request: Request):
         return RedirectResponse(url=f"/ui/diets?diet_name={diet_name}")
     return RedirectResponse(url="/ui/diets")
 
-@app.get("/ui/diets")
+@app.get("/ui/login")
+def login_page(request: Request):
+    try:
+        verify_auth_token(request)
+        return RedirectResponse(url="/")
+    except HTTPException:
+        return templates.TemplateResponse("login.html", {"request": request})
+
+@app.post("/api/login")
+def login_submit(request: Request, password: str = Form(...)):
+    expected_password = os.getenv("EVALDIET_LOGIN_PASSWORD", "goodgooddiets5")
+    if password != expected_password:
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    response = JSONResponse({"detail": "Login Successful"}, status_code=200)
+    # --- SET AUTH COOKIE HERE ---
+    response.set_cookie(
+        key="auth_token",
+        value=password,
+        httponly=True,        # JS cannot read
+        secure=False,         # True in prod (HTTPS)
+        samesite="lax",       # Same-domain
+        path="/",
+        max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),      # 1 hour default
+    )
+    return response
+
+@app.post("/logout", dependencies=[Depends(verify_auth_token)])
+def logout():
+    response = RedirectResponse(url="/ui/login", status_code=303)
+    response.delete_cookie(key="auth_token", path="/")
+    return response
+
+
+@app.get("/ui/diets", dependencies=[Depends(verify_auth_token)])
 def diet_details(request: Request, diet_name: str):
     return templates.TemplateResponse("diets.html", {"request": request})
     
-@app.get("/ui/foods")
+@app.get("/ui/foods", dependencies=[Depends(verify_auth_token)])
 def all_foods(request: Request):
     return templates.TemplateResponse("foods.html", {"request": request})
 
-@app.get("/ui/foods/edit/{fdc_id}")
+@app.get("/ui/foods/edit/{fdc_id}", dependencies=[Depends(verify_auth_token)])
 def edit_food(request: Request, fdc_id: int):
     return templates.TemplateResponse("foods_edit.html", {"request": request, "fdc_id": fdc_id})
 
@@ -82,8 +131,8 @@ def edit_food(request: Request, fdc_id: int):
 
 
 
-@app.get("/api/foods")
-@app.get("/api/foods/{fdc_id}")
+@app.get("/api/foods", dependencies=[Depends(verify_auth_token)])
+@app.get("/api/foods/{fdc_id}", dependencies=[Depends(verify_auth_token)])
 def get_foods(fdc_id: int | None = None):
     conn = None
     try:
@@ -107,7 +156,7 @@ def get_foods(fdc_id: int | None = None):
         if conn is not None:
             conn.close()
 
-@app.put("/api/foods/{fdcid}")
+@app.put("/api/foods/{fdcid}", dependencies=[Depends(verify_auth_token)])
 def update_food(fdcid: int, payload: dict = Body(...)):
     conn = None
     try:
@@ -142,7 +191,7 @@ def update_food(fdcid: int, payload: dict = Body(...)):
         if conn is not None:
             conn.close()
 
-@app.delete("/api/foods/{fdc_id}")
+@app.delete("/api/foods/{fdc_id}", dependencies=[Depends(verify_auth_token)])
 def delete_food(fdc_id: int):
     conn = None
     try:
@@ -162,7 +211,7 @@ def delete_food(fdc_id: int):
             conn.close()
 
 
-@app.post("/api/foods/create_food_from_fdcid/{fdcid}") 
+@app.post("/api/foods/create_food_from_fdcid/{fdcid}", dependencies=[Depends(verify_auth_token)]) 
 def create_food_from_fdcid(fdcid: int, request: Request):
 
     #API Call to FDC to get food nutrition details
@@ -236,7 +285,7 @@ def create_food_from_fdcid(fdcid: int, request: Request):
     return "Food %d %s created" % (fdcid, foodname)
 
 
-@app.put("/api/foods/update_food_from_fdcid/{fdcid}") 
+@app.put("/api/foods/update_food_from_fdcid/{fdcid}", dependencies=[Depends(verify_auth_token)]) 
 def update_food_from_fdcid(fdcid: int, request: Request):
     #API Call to FDC to get food nutrition details
     httpx_client =  request.app.state.httpx_client
@@ -302,7 +351,7 @@ def update_food_from_fdcid(fdcid: int, request: Request):
 
 
 
-@app.get("/api/diets/{diet_name}")
+@app.get("/api/diets/{diet_name}", dependencies=[Depends(verify_auth_token)])
 def get_diets(diet_name: str = "*"):
     conn = None
     try:
@@ -322,7 +371,7 @@ def get_diets(diet_name: str = "*"):
         if conn is not None:
             conn.close()
 
-@app.get("/api/diets/{diet_name}/nutrition")
+@app.get("/api/diets/{diet_name}/nutrition", dependencies=[Depends(verify_auth_token)])
 def diets_nutrition(diet_name: str):
     conn = None
     try:
@@ -374,7 +423,7 @@ def diets_nutrition(diet_name: str):
         if conn is not None:
             conn.close()
 
-@app.post("/api/diet")
+@app.post("/api/diet", dependencies=[Depends(verify_auth_token)])
 def create_diet(payload: DietCreate):
     conn = None
     try:
@@ -395,7 +444,7 @@ def create_diet(payload: DietCreate):
         if conn is not None:
             conn.close()
 
-@app.put("/api/diet")
+@app.put("/api/diet", dependencies=[Depends(verify_auth_token)])
 def update_diet(payload: DietUpdate):
     conn = None
     try:
@@ -434,7 +483,7 @@ def update_diet(payload: DietUpdate):
         if conn is not None:
             conn.close()
 
-@app.delete("/api/diet")
+@app.delete("/api/diet", dependencies=[Depends(verify_auth_token)])
 def delete_diet(payload: DietDelete):
     conn = None
     try:
@@ -462,7 +511,7 @@ def delete_diet(payload: DietDelete):
         if conn is not None:
             conn.close()
 
-@app.put("/api/diet/name_only")
+@app.put("/api/diet/name_only", dependencies=[Depends(verify_auth_token)])
 def update_diet_name_only(payload: DietNameUpdate):
     conn = None
     try:
@@ -507,3 +556,4 @@ def handle_httpx_exception(e: Exception):
             "traceback": traceback.format_exc(),
         },
     )
+

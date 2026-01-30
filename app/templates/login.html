@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  {% include "/partials/head.html" %}
+  <body class="bg-body-tertiary" data-bs-theme="dark">
+    <div class="d-flex align-items-center justify-content-center min-vh-100 px-3">
+      <div class="card shadow-sm border-0" style="max-width: 420px; width: 100%;">
+        <div class="card-body p-4">
+          <h1 class="h4 mb-3">Login</h1>
+          <div id="login-error" class="alert alert-danger py-2 d-none" role="alert"></div>
+
+          <form id="login-form" method="post" action="/api/login">
+            <div class="mb-3">
+              <label for="password" class="form-label">Password</label>
+              <input
+                type="password"
+                class="form-control"
+                id="password"
+                name="password"
+                autocomplete="current-password"
+                required
+                autofocus
+              />
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Sign in</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <script>
+      const form = document.getElementById("login-form");
+      const errorEl = document.getElementById("login-error");
+
+      function showMsg(message) {
+        errorEl.textContent = message || "Login failed";
+        errorEl.classList.remove("d-none");
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        errorEl.classList.add("d-none");
+
+        const formData = new FormData(form);
+        try {
+          const response = await fetch(form.action, {
+            method: "POST",
+            body: new URLSearchParams(formData),
+            credentials: "same-origin",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+          });
+
+          let message = "Login failed";
+          try {
+            const data = await response.json();
+            message = data.detail || data.message || message;
+          } catch (e) {
+            const text = await response.text();
+            if (text) {
+              message = text;
+            }
+          }
+
+          if (response.ok) {
+            showMsg(message);
+            window.location.href = "/";
+            return;
+          }
+
+          showMsg(message);
+        } catch (err) {
+          showMsg("Network error. Please try again.");
+        }
+      });
+    </script>
+  </body>
+</html>
