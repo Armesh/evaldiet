@@ -1,0 +1,29 @@
+.diet-auto-save-toast {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  color: #d7f5e1;
+  background: rgba(18, 48, 28, 0.95);
+  border: 1px solid rgba(60, 196, 90, 0.7);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 1050;
+}
+
+.diet-auto-save-toast.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.diet-auto-save-toast .bi {
+  color: #3cc45a;
+}
