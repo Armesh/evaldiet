@@ -112,7 +112,6 @@ def logout():
     response.delete_cookie(key="auth_token", path="/")
     return response
 
-
 @app.get("/ui/diets", dependencies=[Depends(verify_auth_token)])
 def diet_details(request: Request, diet_name: str):
     return templates.TemplateResponse("diets.html", {"request": request})
@@ -124,6 +123,10 @@ def all_foods(request: Request):
 @app.get("/ui/foods/edit/{fdc_id}", dependencies=[Depends(verify_auth_token)])
 def edit_food(request: Request, fdc_id: int):
     return templates.TemplateResponse("foods_edit.html", {"request": request, "fdc_id": fdc_id})
+
+@app.get("/ui/settings", dependencies=[Depends(verify_auth_token)])
+def settings_page(request: Request):
+    return templates.TemplateResponse("settings.html", {"request": request})
 
 
 

@@ -727,6 +727,257 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    const dietColumnsStorageKey = "diet_columns";
+    const requiredDietColumns = ["diet_name", "fdc_id", "quantity", "sort_order", "color"];
+    const defaultDietColumns = [
+        ...requiredDietColumns,
+        "Name",
+        "Unit",
+        "Price",
+        "Energy kcal",
+        "Protein g",
+        "Total lipid (fat) g",
+        "Carbohydrate, by difference g",
+        "Fiber, total dietary g",
+        "Calcium, Ca mg",
+        "Iron, Fe mg",
+        "Magnesium, Mg mg",
+        "Phosphorus, P mg",
+        "Potassium, K mg",
+        "Sodium, Na mg",
+        "Zinc, Zn mg",
+        "Copper, Cu mg",
+        "Selenium, Se Âµg",
+        "Vitamin C, total ascorbic acid mg",
+        "Thiamin mg",
+        "Riboflavin mg",
+        "Niacin mg",
+        "Pantothenic acid mg",
+        "Vitamin B-6 mg",
+        "Folate, total Âµg",
+        "Vitamin B-12 Âµg",
+        "Choline, total mg",
+        "Vitamin A, RAE Âµg",
+        "Cholesterol mg",
+        "Fatty acids, total saturated g",
+        "Vitamin E (alpha-tocopherol) mg",
+        "Vitamin K (phylloquinone) Âµg",
+        "Vitamin K (Menaquinone-4) Âµg",
+        "Vitamin K (Dihydrophylloquinone) Âµg",
+    ];
+
+    function normalizeDietColumns(columns) {
+        const normalized = Array.from(new Set(columns));
+        requiredDietColumns.forEach((col) => {
+            if (!normalized.includes(col)) {
+                normalized.push(col);
+            }
+        });
+        return normalized;
+    }
+
+    function getSelectedDietColumns() {
+        const fallback = normalizeDietColumns(defaultDietColumns);
+        if (!localStorage.getItem(dietColumnsStorageKey)) {
+            localStorage.setItem(dietColumnsStorageKey, JSON.stringify(fallback));
+            return fallback.slice();
+        }
+        try {
+            const stored = JSON.parse(localStorage.getItem(dietColumnsStorageKey));
+            if (Array.isArray(stored) && stored.length > 0) {
+                const normalized = normalizeDietColumns(stored);
+                localStorage.setItem(dietColumnsStorageKey, JSON.stringify(normalized));
+                return normalized;
+            }
+        } catch {
+            // fall through to default
+        }
+        localStorage.setItem(dietColumnsStorageKey, JSON.stringify(fallback));
+        return fallback.slice();
+    }
+
+    function initDietSettings() {
+        if (window.location.pathname !== "/ui/settings") {
+            return;
+        }
+        const list = document.getElementById("diet-columns-list");
+        const saveBtn = document.getElementById("diet-columns-save");
+        const resetBtn = document.getElementById("diet-columns-reset");
+        const status = document.getElementById("diet-columns-status");
+        const countBadge = document.getElementById("diet-columns-selected-count");
+        const toast = document.getElementById("diet-columns-toast");
+        if (!list || !saveBtn || !resetBtn) {
+            return;
+        }
+        let originalSelection = new Set(getSelectedDietColumns());
+        let toastTimer = null;
+
+        function renderList(columns) {
+            const selected = new Set(getSelectedDietColumns());
+            const requiredSet = new Set(requiredDietColumns);
+            const requiredSelectedCount = requiredDietColumns.filter((col) => selected.has(col)).length;
+            list.innerHTML = "";
+            let selectedCount = requiredSelectedCount;
+            columns.forEach((col) => {
+                if (requiredSet.has(col)) {
+                    return;
+                }
+                const wrapper = document.createElement("div");
+                wrapper.className = "col-12 col-md-3";
+
+                const formCheck = document.createElement("div");
+                formCheck.className = "form-check";
+
+                const input = document.createElement("input");
+                input.className = "form-check-input";
+                input.type = "checkbox";
+                input.id = `diet-col-${col.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
+                input.value = col;
+                input.checked = selected.has(col);
+                if (input.checked) {
+                    selectedCount += 1;
+                }
+
+                const label = document.createElement("label");
+                label.className = "form-check-label";
+                label.setAttribute("for", input.id);
+                label.textContent = col;
+
+                formCheck.appendChild(input);
+                formCheck.appendChild(label);
+                wrapper.appendChild(formCheck);
+                list.appendChild(wrapper);
+            });
+            const message = `${selectedCount} selected.`;
+            status.textContent = message;
+            if (countBadge) {
+                countBadge.textContent = message;
+            }
+        }
+
+        function updateSelectedCount() {
+            const checkedCount = list.querySelectorAll("input[type='checkbox']:checked").length;
+            const message = `${checkedCount + requiredDietColumns.length} selected.`;
+            status.textContent = message;
+            if (countBadge) {
+                countBadge.textContent = message;
+            }
+        }
+
+        function getCurrentSelection() {
+            return new Set(
+                normalizeDietColumns(
+                    Array.from(list.querySelectorAll("input[type='checkbox']:checked")).map((input) => input.value)
+                )
+            );
+        }
+
+        function selectionsEqual(a, b) {
+            if (a.size !== b.size) return false;
+            for (const value of a) {
+                if (!b.has(value)) return false;
+            }
+            return true;
+        }
+
+        function updateSaveEnabled() {
+            const current = getCurrentSelection();
+            saveBtn.disabled = selectionsEqual(current, originalSelection);
+        }
+
+        function showToast() {
+            if (!toast) return;
+            toast.classList.add("is-visible");
+            if (toastTimer) {
+                clearTimeout(toastTimer);
+            }
+            toastTimer = setTimeout(() => {
+                toast.classList.remove("is-visible");
+            }, 1600);
+        }
+
+        function loadDietColumnsFromApi() {
+            status.textContent = "Loading columns...";
+            return fetch("/api/diets/*", { credentials: "same-origin" })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Request failed with ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((diets) => {
+                    const firstDiet = Array.isArray(diets) && diets.length > 0 ? diets[0]?.diet_name : null;
+                    if (!firstDiet) {
+                        throw new Error("No diets found.");
+                    }
+                    return fetch(`/api/diets/${encodeURIComponent(firstDiet)}/nutrition`, {
+                        credentials: "same-origin",
+                    });
+                })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Request failed with ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((items) => {
+                    const cols = Object.keys((items && items[0]) || {});
+                    const unique = Array.from(new Set(cols));
+                    const allColumns = Array.from(
+                        new Set([...defaultDietColumns, ...unique, ...getSelectedDietColumns()])
+                    );
+                    renderList(allColumns);
+                    originalSelection = new Set(getSelectedDietColumns());
+                    updateSaveEnabled();
+                    status.textContent = "";
+                })
+                .catch((error) => {
+                    const selected = getSelectedDietColumns();
+                    const allColumns = Array.from(new Set([...defaultDietColumns, ...selected]));
+                    renderList(allColumns);
+                    originalSelection = new Set(getSelectedDietColumns());
+                    updateSaveEnabled();
+                    status.textContent = `Failed to load columns: ${error.message}`;
+                });
+        }
+
+        loadDietColumnsFromApi();
+
+        list.addEventListener("change", (event) => {
+            if (event.target && event.target.matches("input[type='checkbox']")) {
+                updateSelectedCount();
+                updateSaveEnabled();
+            }
+        });
+
+        saveBtn.addEventListener("click", () => {
+            const checked = Array.from(list.querySelectorAll("input[type='checkbox']:checked"))
+                .map((input) => input.value);
+            if (checked.length === 0 && requiredDietColumns.length === 0) {
+                status.textContent = "Select at least one column.";
+                return;
+            }
+            const normalized = normalizeDietColumns(checked);
+            localStorage.setItem(dietColumnsStorageKey, JSON.stringify(normalized));
+            originalSelection = new Set(normalized);
+            updateSaveEnabled();
+            updateSelectedCount();
+            showToast();
+        });
+
+        resetBtn.addEventListener("click", () => {
+            const normalized = normalizeDietColumns(defaultDietColumns);
+            localStorage.setItem(dietColumnsStorageKey, JSON.stringify(normalized));
+            renderList(defaultDietColumns);
+            originalSelection = new Set(normalized);
+            updateSaveEnabled();
+            updateSelectedCount();
+            showToast();
+        });
+    }
+
+    initDietSettings();
+
     const dietItemsHead = document.getElementById("diet-items-head");
     const dietItemsBody = document.getElementById("diet-items-body");
     const dietItemsStatus = document.getElementById("diet-items-status");
@@ -743,7 +994,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let autoSaveToastTimer = null;
     let rdaByNutrient = new Map();
     let rdaLoadPromise = null;
-
     function normalizeNutrientName(name) {
         return String(name || "")
             .replace(/[()]/g, "")
@@ -1202,11 +1452,21 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 const rawColumns = Object.keys(items[0] || {});
+                const selectedColumns = new Set(getSelectedDietColumns());
                 const columns = ["delete_action"];
+                if (rawColumns.includes("diet_name")) {
+                    columns.push("diet_name");
+                }
+                if (rawColumns.includes("fdc_id")) {
+                    columns.push("fdc_id");
+                }
+                if (rawColumns.includes("sort_order")) {
+                    columns.push("sort_order");
+                }
                 if (rawColumns.includes("color")) {
                     columns.push("color");
                 }
-                if (rawColumns.includes("Name")) {
+                if (rawColumns.includes("Name") && selectedColumns.has("Name")) {
                     columns.push("Name");
                 }
                 if (rawColumns.includes("quantity")) {
@@ -1214,6 +1474,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 rawColumns.forEach((col) => {
                     if (col === "color" || col === "Name" || col === "quantity") {
+                        return;
+                    }
+                    if (col === "diet_name" || col === "fdc_id" || col === "sort_order" || col === "Energy kJ") {
+                        return;
+                    }
+                    if (!selectedColumns.has(col)) {
                         return;
                     }
                     columns.push(col);
