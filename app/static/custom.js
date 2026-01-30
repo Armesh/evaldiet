@@ -741,6 +741,50 @@ document.addEventListener("DOMContentLoaded", () => {
     let saveInFlight = false;
     let autoSaveQueued = false;
     let autoSaveToastTimer = null;
+    let rdaByNutrient = new Map();
+    let rdaLoadPromise = null;
+
+    function normalizeNutrientName(name) {
+        return String(name || "")
+            .replace(/[()]/g, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+    }
+
+    function loadRda() {
+        if (rdaLoadPromise) {
+            return rdaLoadPromise;
+        }
+        rdaLoadPromise = fetch("/api/rda", { credentials: "same-origin" })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((rows) => {
+                const map = new Map();
+                if (Array.isArray(rows)) {
+                    rows.forEach((row) => {
+                        const nutrientRaw = row?.nutrient ?? row?.Nutrient ?? row?.NUTRIENT;
+                        const valueRaw = row?.value ?? row?.Value ?? row?.VALUE;
+                        const nutrient = normalizeNutrientName(nutrientRaw);
+                        const value = Number(valueRaw);
+                        if (nutrient && Number.isFinite(value)) {
+                            map.set(nutrient, value);
+                        }
+                    });
+                }
+                rdaByNutrient = map;
+                return map;
+            })
+            .catch(() => {
+                rdaByNutrient = new Map();
+                return rdaByNutrient;
+            });
+        return rdaLoadPromise;
+    }
 
     async function sha1Hex(str) {
         const encoded = new TextEncoder().encode(str);
@@ -1133,6 +1177,7 @@ document.addEventListener("DOMContentLoaded", () => {
         dietItemsAdd.disabled = true;
         activeEditRow = null;
         return ensureFoodsLoaded()
+            .then(() => loadRda())
             .then(() => fetch(`/api/diets/${encodeURIComponent(dietName)}/nutrition`))
             .then((response) => {
                 if (!response.ok) {
@@ -1442,6 +1487,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (rawColumns.includes("Energy kcal")) {
                     const totalsRow = document.createElement("tr");
                     totalsRow.classList.add("totals-row");
+                    const nutrients_with_rda = [];
                     const highlightTotals = new Set([
                         "Price",
                         "Energy kcal",
@@ -1499,6 +1545,26 @@ document.addEventListener("DOMContentLoaded", () => {
                                 cell.innerHTML = `${roundedTotal}<br>(${percent}%)`;
                             } else {
                                 cell.textContent = roundedTotal;
+                            }
+                            const rdaKey = normalizeNutrientName(col);
+                            if (rdaByNutrient.has(rdaKey)) {
+                                nutrients_with_rda.push({ nutrient: col, totals_value: total });
+                                const rdaValue = rdaByNutrient.get(rdaKey);
+                                if (Number.isFinite(rdaValue) && rdaValue > 0) {
+                                    const rdaPercent = Math.round((total / rdaValue) * 100);
+                                    const percentSpan = document.createElement("span");
+                                    percentSpan.textContent = ` (${rdaPercent}%)`;
+                                    const isCholesterol = rdaKey === normalizeNutrientName("Cholesterol mg");
+                                    const isSaturatedFat = rdaKey === normalizeNutrientName("Fatty acids, total saturated g");
+                                    if (isCholesterol || isSaturatedFat) {
+                                        if (rdaPercent > 100) {
+                                            percentSpan.classList.add("text-danger");
+                                        }
+                                    } else if (rdaPercent < 70) {
+                                        percentSpan.classList.add("text-danger");
+                                    }
+                                    cell.appendChild(percentSpan);
+                                }
                             }
                             if (highlightTotals.has(col)) {
                                 const colorClass = totalsColorClass[col];
