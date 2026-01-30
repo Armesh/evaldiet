@@ -1107,6 +1107,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function scheduleAutoSave(delay = 900) {
+        if (activeEditRow) {
+            return;
+        }
         if (autoSaveTimer) {
             clearTimeout(autoSaveTimer);
         }
@@ -1212,7 +1215,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function setEditingRow(row) {
         if (activeEditRow && activeEditRow !== row) {
-            activeEditRow.classList.remove("is-editing");
+            clearEditingRow({ commit: true });
         }
         activeEditRow = row;
         row.classList.add("is-editing");
@@ -1221,13 +1224,21 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function clearEditingRow() {
-        if (activeEditRow) {
-            activeEditRow.classList.remove("is-editing");
+    function clearEditingRow({ commit = false } = {}) {
+        const row = activeEditRow;
+        if (row) {
+            row.classList.remove("is-editing");
             activeEditRow = null;
         }
         if (dietItemsTable) {
             dietItemsTable.classList.remove("is-editing");
+        }
+        if (commit && row && rowHasChanges(row)) {
+            if (autoSaveTimer) {
+                clearTimeout(autoSaveTimer);
+                autoSaveTimer = null;
+            }
+            autoSaveDirtyRows();
         }
     }
 
@@ -1238,7 +1249,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (event.target.closest("#diet-items-body tr")) {
             return;
         }
-        clearEditingRow();
+        clearEditingRow({ commit: true });
     });
 
     document.addEventListener("keydown", (event) => {
@@ -1248,7 +1259,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!activeEditRow) {
             return;
         }
-        clearEditingRow();
+        clearEditingRow({ commit: true });
     });
 
     function closeColorMenus(target) {
