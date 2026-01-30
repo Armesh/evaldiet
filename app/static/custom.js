@@ -1421,7 +1421,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                 input.step = "1";
                             } else {
                                 input.type = "number";
-                                input.step = "0.01";
+                                input.step = "1";
                             }
                             input.addEventListener("input", () => {
                                 display.textContent = input.value;
