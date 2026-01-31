@@ -728,6 +728,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const dietColumnsStorageKey = "diet_columns";
+    const dietRdaThresholdKey = "diet_rda_threshold";
+    const dietUlThresholdKey = "diet_ul_threshold";
+    const dietHideRdaUlValuesKey = "diet_hide_rda_ul_values";
+    const defaultRdaThreshold = 70;
+    const defaultUlThreshold = 100;
     const requiredDietColumns = ["diet_name", "fdc_id", "quantity", "sort_order", "color"];
     const defaultDietColumns = [
         ...requiredDietColumns,
@@ -763,7 +768,6 @@ document.addEventListener("DOMContentLoaded", () => {
         "Vitamin E (alpha-tocopherol) mg",
         "Vitamin K (phylloquinone) µg",
         "Vitamin K (Menaquinone-4) µg",
-        "Vitamin K (Dihydrophylloquinone) µg",
     ];
 
     function normalizeDietColumns(columns) {
@@ -806,6 +810,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const status = document.getElementById("diet-columns-status");
         const countBadge = document.getElementById("diet-columns-selected-count");
         const toast = document.getElementById("diet-columns-toast");
+        const rdaThresholdInput = document.getElementById("diet-rda-threshold");
+        const ulThresholdInput = document.getElementById("diet-ul-threshold");
+        const hideRdaUlValuesInput = document.getElementById("diet-hide-rda-ul-values");
+        const thresholdsSaveBtn = document.getElementById("diet-thresholds-save");
+        const thresholdsResetBtn = document.getElementById("diet-thresholds-reset");
+        const thresholdsStatus = document.getElementById("diet-thresholds-status");
         if (!list || !saveBtn || !resetBtn) {
             return;
         }
@@ -931,7 +941,61 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
         }
 
+        function getThresholdValue(key, fallback) {
+            const raw = localStorage.getItem(key);
+            if (raw === null || raw === "") {
+                return fallback;
+            }
+            const value = Number(raw);
+            return Number.isFinite(value) ? value : fallback;
+        }
+
+        function setThresholdInputs() {
+            if (rdaThresholdInput) {
+                rdaThresholdInput.value = String(getThresholdValue(dietRdaThresholdKey, defaultRdaThreshold));
+            }
+            if (ulThresholdInput) {
+                ulThresholdInput.value = String(getThresholdValue(dietUlThresholdKey, defaultUlThreshold));
+            }
+            if (hideRdaUlValuesInput) {
+                hideRdaUlValuesInput.checked = localStorage.getItem(dietHideRdaUlValuesKey) === "true";
+            }
+        }
+
+        function saveThresholds() {
+            if (!rdaThresholdInput || !ulThresholdInput) {
+                return;
+            }
+            const rdaValue = Number(rdaThresholdInput.value);
+            const ulValue = Number(ulThresholdInput.value);
+            if (!Number.isFinite(rdaValue) || !Number.isFinite(ulValue)) {
+                if (thresholdsStatus) {
+                    thresholdsStatus.textContent = "Enter valid numbers.";
+                }
+                return;
+            }
+            localStorage.setItem(dietRdaThresholdKey, String(rdaValue));
+            localStorage.setItem(dietUlThresholdKey, String(ulValue));
+            if (hideRdaUlValuesInput) {
+                localStorage.setItem(dietHideRdaUlValuesKey, String(hideRdaUlValuesInput.checked));
+            }
+            if (thresholdsStatus) {
+                thresholdsStatus.textContent = "Saved.";
+            }
+        }
+
+        function resetThresholds() {
+            localStorage.setItem(dietRdaThresholdKey, String(defaultRdaThreshold));
+            localStorage.setItem(dietUlThresholdKey, String(defaultUlThreshold));
+            localStorage.setItem(dietHideRdaUlValuesKey, "false");
+            setThresholdInputs();
+            if (thresholdsStatus) {
+                thresholdsStatus.textContent = "Reset to default.";
+            }
+        }
+
         loadDietColumnsFromApi();
+        setThresholdInputs();
 
         list.addEventListener("change", (event) => {
             if (event.target && event.target.matches("input[type='checkbox']")) {
@@ -964,6 +1028,17 @@ document.addEventListener("DOMContentLoaded", () => {
             updateSelectedCount();
             showToast();
         });
+
+        if (thresholdsSaveBtn) {
+            thresholdsSaveBtn.addEventListener("click", () => {
+                saveThresholds();
+            });
+        }
+        if (thresholdsResetBtn) {
+            thresholdsResetBtn.addEventListener("click", () => {
+                resetThresholds();
+            });
+        }
     }
 
     initDietSettings();
@@ -985,6 +1060,28 @@ document.addEventListener("DOMContentLoaded", () => {
     let autoSaveToastTimer = null;
     let rdaByNutrient = new Map();
     let rdaLoadPromise = null;
+    let ulByNutrient = new Map();
+    let ulLoadPromise = null;
+    function getStoredThreshold(key, fallback) {
+        const raw = localStorage.getItem(key);
+        if (raw === null || raw === "") {
+            return fallback;
+        }
+        const value = Number(raw);
+        return Number.isFinite(value) ? value : fallback;
+    }
+    function getStoredToggle(key, fallback = false) {
+        const raw = localStorage.getItem(key);
+        if (raw === null || raw === "") {
+            return fallback;
+        }
+        if (raw === "true") return true;
+        if (raw === "false") return false;
+        return fallback;
+    }
+    const rdaWarningThreshold = getStoredThreshold(dietRdaThresholdKey, defaultRdaThreshold);
+    const ulDangerThreshold = getStoredThreshold(dietUlThresholdKey, defaultUlThreshold);
+    const hideRdaUlValues = getStoredToggle(dietHideRdaUlValuesKey, false);
     function loadRda() {
         if (rdaLoadPromise) {
             return rdaLoadPromise;
@@ -1017,6 +1114,40 @@ document.addEventListener("DOMContentLoaded", () => {
                 return rdaByNutrient;
             });
         return rdaLoadPromise;
+    }
+
+    function loadUl() {
+        if (ulLoadPromise) {
+            return ulLoadPromise;
+        }
+        ulLoadPromise = fetch("/api/ul", { credentials: "same-origin" })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((rows) => {
+                const map = new Map();
+                if (Array.isArray(rows)) {
+                    rows.forEach((row) => {
+                        const nutrientRaw = row?.nutrient ?? row?.Nutrient ?? row?.NUTRIENT;
+                        const valueRaw = row?.value ?? row?.Value ?? row?.VALUE;
+                        const nutrient = String(nutrientRaw || "").trim();
+                        const value = Number(valueRaw);
+                        if (nutrient && Number.isFinite(value)) {
+                            map.set(nutrient, value);
+                        }
+                    });
+                }
+                ulByNutrient = map;
+                return map;
+            })
+            .catch(() => {
+                ulByNutrient = new Map();
+                return ulByNutrient;
+            });
+        return ulLoadPromise;
     }
 
     async function sha1Hex(str) {
@@ -1422,6 +1553,7 @@ document.addEventListener("DOMContentLoaded", () => {
         activeEditRow = null;
         return ensureFoodsLoaded()
             .then(() => loadRda())
+            .then(() => loadUl())
             .then(() => fetch(`/api/diets/${encodeURIComponent(dietName)}/nutrition`))
             .then((response) => {
                 if (!response.ok) {
@@ -1755,7 +1887,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (rawColumns.includes("Energy kcal")) {
                     const totalsRow = document.createElement("tr");
                     totalsRow.classList.add("totals-row");
-                    const nutrients_with_rda = [];
                     const highlightTotals = new Set([
                         "Price",
                         "Energy kcal",
@@ -1768,6 +1899,22 @@ document.addEventListener("DOMContentLoaded", () => {
                         "Total lipid (fat) g": "totals-fat",
                         "Carbohydrate, by difference g": "totals-carb",
                     };
+                    function getColumnTotal(col) {
+                        let total = 0;
+                        items.forEach((item) => {
+                            const fieldValue = item[col];
+                            if (typeof fieldValue === "number" && Number.isFinite(fieldValue)) {
+                                total += fieldValue;
+                            } else if (
+                                typeof fieldValue === "string" &&
+                                fieldValue.trim() !== "" &&
+                                !Number.isNaN(Number(fieldValue))
+                            ) {
+                                total += Number(fieldValue);
+                            }
+                        });
+                        return total;
+                    }
 
                     columns.forEach((col) => {
                         const cell = document.createElement("td");
@@ -1785,22 +1932,10 @@ document.addEventListener("DOMContentLoaded", () => {
                         } else if (col === "quantity" || col === "Unit") {
                             cell.textContent = "";
                         } else {
-                            let total = 0;
-                            items.forEach((item) => {
-                                const fieldValue = item[col];
-                                if (typeof fieldValue === "number" && Number.isFinite(fieldValue)) {
-                                    total += fieldValue;
-                                } else if (
-                                    typeof fieldValue === "string" &&
-                                    fieldValue.trim() !== "" &&
-                                    !Number.isNaN(Number(fieldValue))
-                                ) {
-                                    total += Number(fieldValue);
-                                }
-                            });
+                            const total = getColumnTotal(col);
                             const roundedTotal = total.toFixed(2);
                             if (col === "Price") {
-                                cell.textContent = `$${roundedTotal}`;
+                                cell.textContent = `$${roundedTotal}  `;
                             } else if (col === "Energy kcal") {
                                 cell.textContent = `${roundedTotal} ⚡`;
                             } else if (
@@ -1813,32 +1948,6 @@ document.addEventListener("DOMContentLoaded", () => {
                                 cell.innerHTML = `${roundedTotal}<br>(${percent}%)`;
                             } else {
                                 cell.textContent = roundedTotal;
-                            }
-                            const rdaKey = String(col || "").trim();
-                            if (rdaByNutrient.has(rdaKey)) {
-                                nutrients_with_rda.push({ nutrient: col, totals_value: total });
-                                const rdaValue = rdaByNutrient.get(rdaKey);
-                                if (Number.isFinite(rdaValue) && rdaValue > 0) {
-                                    const rdaPercent = Math.round((total / rdaValue) * 100);
-                                    const percentSpan = document.createElement("span");
-                                    percentSpan.textContent = ` (${rdaPercent}%)`;
-                                    const isCholesterol = rdaKey === "Cholesterol mg";
-                                    const isSaturatedFat = rdaKey === "Fatty acids, total saturated g";
-                                    if (isCholesterol || isSaturatedFat) {
-                                        if (rdaPercent > 100) {
-                                            percentSpan.classList.add("text-danger");
-                                            if (isCholesterol || isSaturatedFat) {
-                                                cell.classList.add("text-danger");
-                                            }
-                                        }
-                                    } else if (rdaPercent < 70) {
-                                        percentSpan.classList.add("text-danger");
-                                    }
-                                    cell.appendChild(percentSpan);
-                                }
-                            }
-                            if (col === "Vitamin A, RAE µg" && total > 3000) {
-                                cell.classList.add("text-danger");
                             }
                             if (highlightTotals.has(col)) {
                                 const colorClass = totalsColorClass[col];
@@ -1853,6 +1962,86 @@ document.addEventListener("DOMContentLoaded", () => {
                         totalsRow.appendChild(cell);
                     });
                     fragment.appendChild(totalsRow);
+
+                    if (rdaByNutrient && rdaByNutrient.size > 0) {
+                        const rdaRow = document.createElement("tr");
+                        rdaRow.classList.add("totals-row");
+                        columns.forEach((col, colIndex) => {
+                            const cell = document.createElement("td");
+                            if (col === "diet_name" || col === "fdc_id" || col === "sort_order" || col === "Energy kJ") {
+                                cell.classList.add("is-hidden-col");
+                            }
+                            if (col === "delete_action") {
+                                cell.classList.add("delete-col");
+                                cell.textContent = "";
+                            } else if (col === "color") {
+                                cell.classList.add("color-col");
+                                cell.textContent = "";
+                            } else if (col === "Name") {
+                                cell.textContent = "RDA %";
+                            } else if (col === "quantity" || col === "Unit") {
+                                cell.textContent = "";
+                            } else {
+                                const total = getColumnTotal(col);
+                                const rdaValue = rdaByNutrient.get(String(col || "").trim());
+                                if (Number.isFinite(rdaValue) && rdaValue > 0) {
+                                    const rdaPercent = Math.round((total / rdaValue) * 100);
+                                    cell.innerHTML = hideRdaUlValues ? `${rdaPercent}%` : `${rdaValue}<br>${rdaPercent}%`;
+                                    if (rdaPercent < rdaWarningThreshold) {
+                                        cell.classList.add("text-warning");
+                                        const totalCell = totalsRow.children?.[colIndex];
+                                        if (totalCell) {
+                                            totalCell.classList.add("text-warning");
+                                        }
+                                    }
+                                } else {
+                                    cell.textContent = "";
+                                }
+                            }
+                            rdaRow.appendChild(cell);
+                        });
+                        fragment.appendChild(rdaRow);
+                    }
+
+                    if (ulByNutrient && ulByNutrient.size > 0) {
+                        const ulRow = document.createElement("tr");
+                        ulRow.classList.add("totals-row");
+                        columns.forEach((col, colIndex) => {
+                            const cell = document.createElement("td");
+                            if (col === "diet_name" || col === "fdc_id" || col === "sort_order" || col === "Energy kJ") {
+                                cell.classList.add("is-hidden-col");
+                            }
+                            if (col === "delete_action") {
+                                cell.classList.add("delete-col");
+                                cell.textContent = "";
+                            } else if (col === "color") {
+                                cell.classList.add("color-col");
+                                cell.textContent = "";
+                            } else if (col === "Name") {
+                                cell.textContent = "Upper Limit (UL) %";
+                            } else if (col === "quantity" || col === "Unit") {
+                                cell.textContent = "";
+                            } else {
+                                const total = getColumnTotal(col);
+                                const ulValue = ulByNutrient.get(col);
+                                if (Number.isFinite(ulValue) && ulValue > 0) {
+                                    const ulPercent = Math.round((total / ulValue) * 100);
+                                    cell.innerHTML = hideRdaUlValues ? `${ulPercent}%` : `${ulValue}<br>${ulPercent}%`;
+                                    if (ulPercent > ulDangerThreshold) {
+                                        cell.classList.add("text-danger");
+                                        const totalCell = totalsRow.children?.[colIndex];
+                                        if (totalCell) {
+                                            totalCell.classList.add("text-danger");
+                                        }
+                                    }
+                                } else {
+                                    cell.textContent = "";
+                                }
+                            }
+                            ulRow.appendChild(cell);
+                        });
+                        fragment.appendChild(ulRow);
+                    }
                 }
 
                 dietItemsBody.innerHTML = "";
