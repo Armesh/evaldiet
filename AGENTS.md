@@ -26,4 +26,6 @@ This repo is a small diet/foods web app. Use this file as the single source of t
 ## Notes for Codex
 - If you touch column-selection logic, keep required columns forced into storage and not user-toggleable in the settings UI.
 - For diet items table editing: do not auto-save mid-edit; save only when leaving edit mode (clicking outside/switching rows/Escape).
+- Always re-check the latest file state before answering questions about current contents.
+- In foods edit UI, "Vitamin K, total µg" is a generated field and must not be editable or shown.
 - Ask before making large structural changes.

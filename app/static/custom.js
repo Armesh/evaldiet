@@ -615,6 +615,9 @@ document.addEventListener("DOMContentLoaded", () => {
         foodsEditFields.innerHTML = "";
         foodsEditOriginal = new Map();
         Object.keys(food || {}).forEach((key) => {
+            if (key === "Vitamin K, total µg") {
+                return;
+            }
             const value = food[key];
             const isNumber = typeof value === "number";
             foodsEditOriginal.set(key, isNumber ? value : (value ?? ""));
@@ -634,12 +637,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (isNumber) {
                 input.type = "number";
-                input.step = "0.01";
+                input.step = "any";
             } else {
                 input.type = "text";
             }
 
-            if (key === "fdc_id") {
+            if (key === "fdc_id" || key === "Vitamin K, total µg") {
                 input.readOnly = true;
             }
 
@@ -766,8 +769,7 @@ document.addEventListener("DOMContentLoaded", () => {
         "Cholesterol mg",
         "Fatty acids, total saturated g",
         "Vitamin E (alpha-tocopherol) mg",
-        "Vitamin K (phylloquinone) µg",
-        "Vitamin K (Menaquinone-4) µg",
+        "Vitamin K, total µg",
     ];
 
     function normalizeDietColumns(columns) {
