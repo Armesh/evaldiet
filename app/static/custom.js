@@ -985,14 +985,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let autoSaveToastTimer = null;
     let rdaByNutrient = new Map();
     let rdaLoadPromise = null;
-    function normalizeNutrientName(name) {
-        return String(name || "")
-            .replace(/[()]/g, "")
-            .replace(/\s+/g, " ")
-            .trim()
-            .toLowerCase();
-    }
-
     function loadRda() {
         if (rdaLoadPromise) {
             return rdaLoadPromise;
@@ -1010,7 +1002,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     rows.forEach((row) => {
                         const nutrientRaw = row?.nutrient ?? row?.Nutrient ?? row?.NUTRIENT;
                         const valueRaw = row?.value ?? row?.Value ?? row?.VALUE;
-                        const nutrient = normalizeNutrientName(nutrientRaw);
+                        const nutrient = String(nutrientRaw || "").trim();
                         const value = Number(valueRaw);
                         if (nutrient && Number.isFinite(value)) {
                             map.set(nutrient, value);
@@ -1454,6 +1446,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 const rawColumns = Object.keys(items[0] || {});
+                if (rdaByNutrient && rdaByNutrient.size > 0) {
+                    const missingRda = Array.from(rdaByNutrient.keys()).filter(
+                        (nutrient) => !rawColumns.includes(nutrient)
+                    );
+                    missingRda.forEach((nutrient) => {
+                        console.warn(`RDA nutrient not found in diet columns: ${nutrient}`);
+                    });
+                }
                 const selectedColumns = new Set(getSelectedDietColumns());
                 const columns = ["delete_action"];
                 if (rawColumns.includes("diet_name")) {
@@ -1814,7 +1814,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             } else {
                                 cell.textContent = roundedTotal;
                             }
-                            const rdaKey = normalizeNutrientName(col);
+                            const rdaKey = String(col || "").trim();
                             if (rdaByNutrient.has(rdaKey)) {
                                 nutrients_with_rda.push({ nutrient: col, totals_value: total });
                                 const rdaValue = rdaByNutrient.get(rdaKey);
@@ -1822,17 +1822,23 @@ document.addEventListener("DOMContentLoaded", () => {
                                     const rdaPercent = Math.round((total / rdaValue) * 100);
                                     const percentSpan = document.createElement("span");
                                     percentSpan.textContent = ` (${rdaPercent}%)`;
-                                    const isCholesterol = rdaKey === normalizeNutrientName("Cholesterol mg");
-                                    const isSaturatedFat = rdaKey === normalizeNutrientName("Fatty acids, total saturated g");
+                                    const isCholesterol = rdaKey === "Cholesterol mg";
+                                    const isSaturatedFat = rdaKey === "Fatty acids, total saturated g";
                                     if (isCholesterol || isSaturatedFat) {
                                         if (rdaPercent > 100) {
                                             percentSpan.classList.add("text-danger");
+                                            if (isCholesterol || isSaturatedFat) {
+                                                cell.classList.add("text-danger");
+                                            }
                                         }
                                     } else if (rdaPercent < 70) {
                                         percentSpan.classList.add("text-danger");
                                     }
                                     cell.appendChild(percentSpan);
                                 }
+                            }
+                            if (col === "Vitamin A, RAE µg" && total > 3000) {
+                                cell.classList.add("text-danger");
                             }
                             if (highlightTotals.has(col)) {
                                 const colorClass = totalsColorClass[col];
