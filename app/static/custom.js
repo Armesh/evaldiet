@@ -747,23 +747,23 @@ document.addEventListener("DOMContentLoaded", () => {
         "Sodium, Na mg",
         "Zinc, Zn mg",
         "Copper, Cu mg",
-        "Selenium, Se Âµg",
+        "Selenium, Se µg",
         "Vitamin C, total ascorbic acid mg",
         "Thiamin mg",
         "Riboflavin mg",
         "Niacin mg",
         "Pantothenic acid mg",
         "Vitamin B-6 mg",
-        "Folate, total Âµg",
-        "Vitamin B-12 Âµg",
+        "Folate, total µg",
+        "Vitamin B-12 µg",
         "Choline, total mg",
-        "Vitamin A, RAE Âµg",
+        "Vitamin A, RAE µg",
         "Cholesterol mg",
         "Fatty acids, total saturated g",
         "Vitamin E (alpha-tocopherol) mg",
-        "Vitamin K (phylloquinone) Âµg",
-        "Vitamin K (Menaquinone-4) Âµg",
-        "Vitamin K (Dihydrophylloquinone) Âµg",
+        "Vitamin K (phylloquinone) µg",
+        "Vitamin K (Menaquinone-4) µg",
+        "Vitamin K (Dihydrophylloquinone) µg",
     ];
 
     function normalizeDietColumns(columns) {
@@ -815,9 +815,8 @@ document.addEventListener("DOMContentLoaded", () => {
         function renderList(columns) {
             const selected = new Set(getSelectedDietColumns());
             const requiredSet = new Set(requiredDietColumns);
-            const requiredSelectedCount = requiredDietColumns.filter((col) => selected.has(col)).length;
             list.innerHTML = "";
-            let selectedCount = requiredSelectedCount;
+            let selectedCount = 0;
             columns.forEach((col) => {
                 if (requiredSet.has(col)) {
                     return;
@@ -857,7 +856,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         function updateSelectedCount() {
             const checkedCount = list.querySelectorAll("input[type='checkbox']:checked").length;
-            const message = `${checkedCount + requiredDietColumns.length} selected.`;
+            const message = `${checkedCount} selected.`;
             status.textContent = message;
             if (countBadge) {
                 countBadge.textContent = message;
@@ -898,34 +897,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
         function loadDietColumnsFromApi() {
             status.textContent = "Loading columns...";
-            return fetch("/api/diets/*", { credentials: "same-origin" })
+            return fetch("/api/foods", { credentials: "same-origin" })
                 .then((response) => {
                     if (!response.ok) {
                         throw new Error(`Request failed with ${response.status}`);
                     }
                     return response.json();
                 })
-                .then((diets) => {
-                    const firstDiet = Array.isArray(diets) && diets.length > 0 ? diets[0]?.diet_name : null;
-                    if (!firstDiet) {
-                        throw new Error("No diets found.");
+                .then((foods) => {
+                    const firstFood = Array.isArray(foods) && foods.length > 0 ? foods[0] : null;
+                    if (!firstFood) {
+                        throw new Error("No foods found.");
                     }
-                    return fetch(`/api/diets/${encodeURIComponent(firstDiet)}/nutrition`, {
-                        credentials: "same-origin",
-                    });
-                })
-                .then((response) => {
-                    if (!response.ok) {
-                        throw new Error(`Request failed with ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then((items) => {
-                    const cols = Object.keys((items && items[0]) || {});
+                    const cols = Object.keys(firstFood || {});
                     const unique = Array.from(new Set(cols));
                     const allColumns = Array.from(
                         new Set([...defaultDietColumns, ...unique, ...getSelectedDietColumns()])
                     );
+                    console.log("Diet columns:", allColumns);
                     renderList(allColumns);
                     originalSelection = new Set(getSelectedDietColumns());
                     updateSaveEnabled();
@@ -934,6 +923,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 .catch((error) => {
                     const selected = getSelectedDietColumns();
                     const allColumns = Array.from(new Set([...defaultDietColumns, ...selected]));
+                    console.log("Diet columns:", allColumns);
                     renderList(allColumns);
                     originalSelection = new Set(getSelectedDietColumns());
                     updateSaveEnabled();
@@ -984,6 +974,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const dietItemsHash = document.getElementById("diet-items-hash");
     const dietItemsSaveAll = document.getElementById("diet-items-save-all");
     const dietItemsAdd = document.getElementById("diet-items-add");
+    const dietItemsClone = document.getElementById("diet-items-clone");
     const dietItemsDeleteAll = document.getElementById("diet-items-delete-all");
     const dietAutoSaveToast = document.getElementById("diet-auto-save-toast");
     if (!dietItemsHead || !dietItemsBody || !dietItemsStatus || !dietItemsAdd) return;
@@ -1807,7 +1798,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                     total += Number(fieldValue);
                                 }
                             });
-                            const roundedTotal = total.toFixed(0);
+                            const roundedTotal = total.toFixed(2);
                             if (col === "Price") {
                                 cell.textContent = `$${roundedTotal}`;
                             } else if (col === "Energy kcal") {
@@ -2025,8 +2016,62 @@ document.addEventListener("DOMContentLoaded", () => {
             })
             .finally(() => {
                 dietItemsAdd.disabled = false;
-            });
+        });
     });
+
+    if (dietItemsClone) {
+        dietItemsClone.addEventListener("click", () => {
+            if (!dietName) {
+                dietItemsStatus.textContent = "Missing diet name for cloning.";
+                return;
+            }
+            if (!Array.isArray(lastLoadedItems)) {
+                dietItemsStatus.textContent = "Diet items not loaded yet.";
+                return;
+            }
+            dietItemsClone.disabled = true;
+            const cloneName = `${dietName}_Cloned_${Date.now()}`;
+            const itemsToClone = lastLoadedItems.map((item) => ({
+                diet_name: cloneName,
+                fdc_id: item.fdc_id,
+                quantity: item.quantity,
+                sort_order: item.sort_order,
+                color: item.color ?? null,
+            }));
+
+            if (itemsToClone.length === 0) {
+                dietItemsStatus.textContent = `No items to clone from ${dietName}.`;
+                dietItemsClone.disabled = false;
+                return;
+            }
+
+            dietItemsStatus.textContent = `Cloning ${dietName}...`;
+            Promise.all(
+                itemsToClone.map((payload) =>
+                    fetch("/api/diet", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(payload),
+                    })
+                )
+            )
+                .then((responses) => {
+                    const failed = responses.filter((response) => !response.ok);
+                    if (failed.length > 0) {
+                        throw new Error(`Failed to clone ${failed.length} item(s).`);
+                    }
+                    window.location.href = `/ui/diets?diet_name=${encodeURIComponent(cloneName)}`;
+                })
+                .catch((error) => {
+                    dietItemsStatus.textContent = `Failed to clone diet: ${error.message}`;
+                })
+                .finally(() => {
+                    dietItemsClone.disabled = false;
+                });
+        });
+    }
 
     if (dietItemsDeleteAll) {
         dietItemsDeleteAll.addEventListener("click", () => {

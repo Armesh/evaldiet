@@ -171,12 +171,12 @@
             <div class="row">
               <div class="col-sm-6">
                 <div class="diet-name-editor" id="diet-name-editor">
-                  <h3 class="mb-0 diet-name-display" id="diet-name-heading">{{ request.query_params.get('diet_name', 'Diet') }}</h3>
+                  <h3 class="mb-0 diet-name-display" id="diet-name-heading">{{ diet_name }}</h3>
                   <input
                     class="form-control form-control-sm diet-name-input"
                     id="diet-name-input"
                     type="text"
-                    value="{{ request.query_params.get('diet_name', 'Diet') }}"
+                    value="{{ diet_name }}"
                     aria-label="Diet name"
                   />
                 </div>
@@ -206,6 +206,9 @@
                       <div id="diet-items-status" class="text-muted small"></div>
                       <div id="diet-items-hash" class="text-muted small"></div>
                       <div class="flex-grow-1"></div>
+                      <button id="diet-items-clone" type="button" class="btn btn-outline-success btn-sm">
+                        Clone Diet
+                      </button>
                       <button id="diet-items-delete-all" type="button" class="btn btn-outline-danger btn-sm">
                         Delete All
                       </button>

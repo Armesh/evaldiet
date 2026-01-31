@@ -114,7 +114,7 @@ def logout():
 
 @app.get("/ui/diets", dependencies=[Depends(verify_auth_token)])
 def diet_details(request: Request, diet_name: str):
-    return templates.TemplateResponse("diets.html", {"request": request})
+    return templates.TemplateResponse("diets.html", {"request": request, "diet_name": diet_name})
     
 @app.get("/ui/foods", dependencies=[Depends(verify_auth_token)])
 def all_foods(request: Request):
@@ -410,9 +410,9 @@ def diets_nutrition(diet_name: str):
                     continue
                 if isinstance(value, (int, float)):
                     if serving_size > 0:
-                        adjusted_value = round((float(value) / serving_size) * float(diet_entry.get("quantity", 0)), 0)
+                        adjusted_value = round((float(value) / serving_size) * float(diet_entry.get("quantity", 0)), 2)
                     else:
-                        adjusted_value = 0.0
+                        adjusted_value = 0.00
                     adjusted_food[key] = adjusted_value
 
             merged = dict(diet_entry)
