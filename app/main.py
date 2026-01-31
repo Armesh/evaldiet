@@ -442,6 +442,22 @@ def get_rda():
         if conn is not None:
             conn.close()
 
+@app.get("/api/ul", dependencies=[Depends(verify_auth_token)])
+def get_ul():
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM UL")
+        rows = cur.fetchall()
+        return [dict(row) for row in rows]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
 @app.post("/api/diet", dependencies=[Depends(verify_auth_token)])
 def create_diet(payload: DietCreate):
     conn = None
