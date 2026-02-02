@@ -131,9 +131,62 @@ def login_page(request: Request):
     except HTTPException:
         return templates.TemplateResponse("login.html", {"request": request})
 
+@app.get("/ui/register")
+def register_page(request: Request):
+    try:
+        verify_auth_token_get_user(request)
+        return RedirectResponse(url="/")
+    except HTTPException:
+        return templates.TemplateResponse("register.html", {"request": request})
+
 @app.get("/hashpassword/{password}")
 def test_hash(password: str):
     return {"hash": hash_password(password)}
+
+@app.post("/api/register")
+def register_submit(request: Request, username: str = Form(...), password: str = Form(...)):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM users WHERE username = ? LIMIT 1", (username,))
+        if cur.fetchone() is not None:
+            raise HTTPException(status_code=400, detail="Username already exists")
+
+        hashed_password = hash_password(password)
+        cur.execute(
+            "INSERT INTO users (username, hashed_password, created_at) VALUES (?, ?, datetime('now'))",
+            (username, hashed_password),
+        )
+        conn.commit()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
+    response = JSONResponse({"detail": "Registration Successful"}, status_code=200)
+    response.set_cookie(
+        key="auth_token",
+        value=hashed_password,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        path="/",
+        max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),
+    )
+    response.set_cookie(
+        key="curr_user",
+        value=username,
+        httponly=False,
+        secure=False,
+        samesite="lax",
+        path="/",
+        max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),
+    )
+    return response
 
 @app.post("/api/login")
 def login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
@@ -174,7 +227,7 @@ def login_submit(request: Request, username: str = Form(...), password: str = Fo
     # --- SET USER HERE ---
     response.set_cookie(
         key="curr_user",
-        value=user,
+        value=username,
         httponly=False,        # JS can read
         secure=False,         # True in prod (HTTPS)
         samesite="lax",       # Same-domain

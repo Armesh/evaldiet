@@ -8,6 +8,11 @@
                 <i class="bi bi-list"></i>
               </a>
             </li>
+            <li class="nav-item">
+              <a class="nav-link" data-lte-toggle="sidebar" href="#" role="button">
+                <span id="nav-current-user" class="nav-link py-0 text-muted small"></span>
+              </a>
+            </li>
           </ul>
           <ul class="navbar-nav ms-auto">
             <!--begin::Fullscreen Toggle-->
@@ -23,3 +28,15 @@
         </div>
         <!--end::Container-->
       </nav>
+      <script>
+        (function () {
+          const el = document.getElementById("nav-current-user");
+          if (!el) return;
+          const match = document.cookie.split("; ").find((row) => row.startsWith("curr_user="));
+          if (!match) return;
+          const value = decodeURIComponent(match.split("=")[1] || "");
+          if (value) {
+            el.textContent = value;
+          }
+        })();
+      </script>

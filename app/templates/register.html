@@ -5,10 +5,10 @@
     <div class="d-flex align-items-center justify-content-center min-vh-100 px-3">
       <div class="card shadow-sm border-0" style="max-width: 420px; width: 100%;">
         <div class="card-body p-4">
-          <h1 class="h4 mb-3">Login</h1>
-          <div id="login-error" class="alert alert-danger py-2 d-none" role="alert"></div>
+          <h1 class="h4 mb-3">Register</h1>
+          <div id="register-error" class="alert alert-danger py-2 d-none" role="alert"></div>
 
-          <form id="login-form" method="post" action="/api/login">
+          <form id="register-form" method="post" action="/api/register">
             <div class="mb-3">
               <label for="username" class="form-label">Username</label>
               <input
@@ -28,24 +28,21 @@
                 class="form-control"
                 id="password"
                 name="password"
-                autocomplete="current-password"
+                autocomplete="new-password"
                 required
               />
             </div>
-            <button type="submit" class="btn btn-primary w-100">Sign in</button>
+            <button type="submit" class="btn btn-primary w-100">Create account</button>
           </form>
-          <div class="text-center mt-3">
-            <a href="/ui/register">Create an account</a>
-          </div>
         </div>
       </div>
     </div>
     <script>
-      const form = document.getElementById("login-form");
-      const errorEl = document.getElementById("login-error");
+      const form = document.getElementById("register-form");
+      const errorEl = document.getElementById("register-error");
 
       function showMsg(message) {
-        errorEl.textContent = message || "Login failed";
+        errorEl.textContent = message || "Registration failed";
         errorEl.classList.remove("d-none");
       }
 
@@ -64,7 +61,7 @@
             },
           });
 
-          let message = "Login failed";
+          let message = "Registration failed";
           try {
             const data = await response.json();
             message = data.detail || data.message || message;
@@ -76,7 +73,6 @@
           }
 
           if (response.ok) {
-            showMsg(message);
             window.location.href = "/";
             return;
           }
