@@ -76,10 +76,15 @@ def strip_user_id(data):
 def user_cookie_payload(user_row) -> str:
     if user_row is None:
         return ""
-    if isinstance(user_row, sqlite3.Row):
+    if isinstance(user_row, dict):
+        data = dict(user_row)
+    elif isinstance(user_row, sqlite3.Row):
         data = dict(user_row)
     else:
-        data = dict(user_row)
+        try:
+            data = dict(user_row)
+        except Exception:
+            return ""
     data.pop("hashed_password", None)
     return json.dumps(data, separators=(",", ":"))
 
@@ -89,7 +94,7 @@ def verify_auth_token_get_user(request: Request) -> dict:
     if auth_token:
         conn = None
         try:
-            conn = sqlite3.connect(get_db_path())
+            conn = get_db_conn()
             conn.row_factory = sqlite3.Row
             cur = conn.cursor()
             cur.execute("SELECT * FROM users WHERE hashed_password = ? LIMIT 1", (auth_token,))
@@ -120,7 +125,8 @@ def root(request: Request, user: dict = Depends(verify_auth_token_get_user)):
     user_id = user["id"]
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT diet_name FROM diets WHERE user_id = ? ORDER BY diet_name ASC LIMIT 1", (user_id,))
         row = cur.fetchone()
@@ -182,7 +188,7 @@ def register_submit(
         reg_code = request.cookies.get("reg_code")
         if not reg_code or captcha_check is None or captcha_code.strip() != reg_code:
             raise HTTPException(status_code=400, detail="Captcha check failed")
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         cur = conn.cursor()
         cur.execute("SELECT 1 FROM users WHERE username = ? LIMIT 1", (username,))
         if cur.fetchone() is not None:
@@ -250,7 +256,7 @@ def register_submit(
 def login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT * FROM users WHERE username = ? LIMIT 1", (username,))
@@ -356,7 +362,7 @@ def update_user(user_id: int, payload: dict = Body(...), user: dict = Depends(ve
 
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         cur = conn.cursor()
         if "username" in updates:
             cur.execute("SELECT 1 FROM users WHERE username = ? AND id != ? LIMIT 1", (username, user_id))
@@ -379,7 +385,7 @@ def update_user(user_id: int, payload: dict = Body(...), user: dict = Depends(ve
 
     updated_user = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT * FROM users WHERE id = ? LIMIT 1", (user_id,))
@@ -420,7 +426,7 @@ def get_foods(fdc_id: int | None = None, user: dict = Depends(verify_auth_token_
     user_id = user["id"]
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         if fdc_id is None:
@@ -445,7 +451,7 @@ def update_food(fdcid: int, payload: dict = Body(...), user: dict = Depends(veri
     user_id = user["id"]
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         cur = conn.cursor()
         cur.execute("PRAGMA table_info(foods)")
         cols = [row[1] for row in cur.fetchall()]
@@ -500,7 +506,7 @@ def delete_food(fdc_id: int, user: dict = Depends(verify_auth_token_get_user)):
     user_id = user["id"]
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         cur = conn.cursor()
         cur.execute("DELETE FROM foods WHERE fdc_id = ? AND user_id = ?", (fdc_id, user_id))
         conn.commit()
@@ -534,7 +540,7 @@ def create_update_food_from_fdcid(fdcid: int, request: Request, user: dict = Dep
     #Set DB Conn
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         cur = conn.cursor()
         #Get the food record from local db first
         cur.execute("SELECT * from foods where fdc_id = ? AND user_id = ?", (fdcid, user_id))
@@ -600,7 +606,7 @@ def create_update_food_from_fdcid(fdcid: int, request: Request, user: dict = Dep
 def get_diets(diet_name: str = "*", user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         if diet_name == "*":
@@ -620,7 +626,7 @@ def get_diets(diet_name: str = "*", user: dict = Depends(verify_auth_token_get_u
 def diets_nutrition(diet_name: str, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT diets.* FROM diets WHERE diets.diet_name = ? AND user_id = ?", (diet_name, user["id"]))
@@ -672,7 +678,7 @@ def diets_nutrition(diet_name: str, user: dict = Depends(verify_auth_token_get_u
 def get_rda(user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT * FROM RDA")
@@ -688,7 +694,7 @@ def get_rda(user: dict = Depends(verify_auth_token_get_user)):
 def get_ul(user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT * FROM UL")
@@ -704,7 +710,7 @@ def get_ul(user: dict = Depends(verify_auth_token_get_user)):
 def create_diet(payload: DietCreate, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         cur = conn.cursor()
         cur.execute(
             """
@@ -725,7 +731,7 @@ def create_diet(payload: DietCreate, user: dict = Depends(verify_auth_token_get_
 def update_diet(payload: DietUpdate, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         cur = conn.cursor()
         original_fdc_id = payload.original_fdc_id if payload.original_fdc_id is not None else payload.fdc_id
         original_quantity = payload.original_quantity if payload.original_quantity is not None else payload.quantity
@@ -765,7 +771,7 @@ def update_diet(payload: DietUpdate, user: dict = Depends(verify_auth_token_get_
 def delete_diet(payload: DietDelete, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         cur = conn.cursor()
         if payload.delete_all:
             cur.execute("DELETE FROM diets WHERE diet_name = ? AND user_id = ?", (payload.diet_name, user["id"]))
@@ -793,7 +799,7 @@ def delete_diet(payload: DietDelete, user: dict = Depends(verify_auth_token_get_
 def update_diet_name_only(payload: DietNameUpdate, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
-        conn = sqlite3.connect(get_db_path())
+        conn = get_db_conn()
         cur = conn.cursor()
         cur.execute(
             "UPDATE diets SET diet_name = ? WHERE diet_name = ? AND user_id = ?",
@@ -813,6 +819,11 @@ def update_diet_name_only(payload: DietNameUpdate, user: dict = Depends(verify_a
 
 def get_db_path() -> str:
     return os.getenv("EVALDIET_DB_PATH", "app/evaldiet.db")
+
+def get_db_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(get_db_path())
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 def handle_httpx_exception(e: Exception):
     if isinstance(e, httpx.HTTPStatusError):

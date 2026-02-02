@@ -3,7 +3,7 @@ INSERT INTO "main"."diets" ("user_id", "diet_name", "fdc_id", "quantity", "sort_
 INSERT INTO "main"."diets" ("user_id", "diet_name", "fdc_id", "quantity", "sort_order", "color") VALUES (xx, 'Vegetarian', '168927', '135', '5', '#2b8066');
 INSERT INTO "main"."diets" ("user_id", "diet_name", "fdc_id", "quantity", "sort_order", "color") VALUES (xx, 'Vegetarian', '7', '30', '2', '#d86a6b');
 INSERT INTO "main"."diets" ("user_id", "diet_name", "fdc_id", "quantity", "sort_order", "color") VALUES (xx, 'Vegetarian', '172430', '30', '7', '#ad5322');
-INSERT INTO "main"."diets" ("user_id", "diet_name", "fdc_id", "quantity", "sort_order", "color") VALUES (xx, 'Vegetarian', '16', '15', '3', '#d86a6b');
+INSERT INTO "main"."diets" ("user_id", "diet_name", "fdc_id", "quantity", "sort_order", "color") VALUES (xx, 'Vegetarian', '1986054', '30', '3', '#d86a6b');
 INSERT INTO "main"."diets" ("user_id", "diet_name", "fdc_id", "quantity", "sort_order", "color") VALUES (xx, 'Vegetarian', '7', '30', '8', '#ad5322');
 INSERT INTO "main"."diets" ("user_id", "diet_name", "fdc_id", "quantity", "sort_order", "color") VALUES (xx, 'Vegetarian', '1101825', '108', '6', '#ad5322');
 INSERT INTO "main"."diets" ("user_id", "diet_name", "fdc_id", "quantity", "sort_order", "color") VALUES (xx, 'Vegetarian', '173944', '100', '9', '#af882e');
