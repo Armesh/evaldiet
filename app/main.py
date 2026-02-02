@@ -4,6 +4,9 @@ import string
 import traceback
 import os
 import sqlite3
+import base64
+import hashlib
+import hmac
 
 import httpx
 from dotenv import load_dotenv
@@ -40,19 +43,51 @@ def random_alphanumeric(length: int = 6) -> str:
     chars = string.ascii_uppercase + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
 
-def verify_auth_token(request: Request) -> bool:
-    expected_token = os.getenv("EVALDIET_LOGIN_PASSWORD", "goodgooddiets5")
+PBKDF2_ITERATIONS = 200_000
+
+def hash_password(plain: str) -> str:
+    if plain is None:
+        raise ValueError("Password is required")
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", str(plain).encode("utf-8"), salt, PBKDF2_ITERATIONS)
+    return f"{PBKDF2_ITERATIONS}${base64.b64encode(salt).decode()}${base64.b64encode(dk).decode()}"
+
+def verify_password(plain: str, stored: str) -> bool:
+    try:
+        iterations_str, salt_b64, hash_b64 = stored.split("$", 2)
+        iterations = int(iterations_str)
+        salt = base64.b64decode(salt_b64)
+        expected = base64.b64decode(hash_b64)
+    except Exception:
+        return False
+    dk = hashlib.pbkdf2_hmac("sha256", str(plain).encode("utf-8"), salt, iterations)
+    return hmac.compare_digest(dk, expected)
+
+def verify_auth_token_get_user(request: Request) -> dict:
     auth_token = request.cookies.get("auth_token")
 
-    if auth_token == expected_token:
-        return True
-    else:
-        login_url = "/ui/login"
-        raise HTTPException(
-            status_code=307,
-            detail="Unauthorized",
-            headers={"Location": login_url},
-        )
+    if auth_token:
+        conn = None
+        try:
+            conn = sqlite3.connect(get_db_path())
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM users WHERE hashed_password = ? LIMIT 1", (auth_token,))
+            row = cur.fetchone()
+            if row is not None:
+                return dict(row)
+        except Exception:
+            pass
+        finally:
+            if conn is not None:
+                conn.close()
+
+    login_url = "/ui/login"
+    raise HTTPException(
+        status_code=307,
+        detail="Unauthorized",
+        headers={"Location": login_url},
+    )
 
 
 # serve /static/...
@@ -60,13 +95,14 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["rand_id"] = random_alphanumeric
 
-@app.get("/", dependencies=[Depends(verify_auth_token)])
-def root(request: Request):
+@app.get("/")
+def root(request: Request, user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
-        cur.execute("SELECT diet_name FROM diets ORDER BY diet_name ASC LIMIT 1")
+        cur.execute("SELECT diet_name FROM diets WHERE user_id = ? ORDER BY diet_name ASC LIMIT 1", (user_id,))
         row = cur.fetchone()
         diet_name = row[0] if row else ""
     except Exception as exc:
@@ -82,23 +118,56 @@ def root(request: Request):
 @app.get("/ui/login")
 def login_page(request: Request):
     try:
-        verify_auth_token(request)
+        verify_auth_token_get_user(request)
         return RedirectResponse(url="/")
     except HTTPException:
         return templates.TemplateResponse("login.html", {"request": request})
 
+@app.get("/hashpassword/{password}")
+def test_hash(password: str):
+    return {"hash": hash_password(password)}
+
 @app.post("/api/login")
-def login_submit(request: Request, password: str = Form(...)):
-    expected_password = os.getenv("EVALDIET_LOGIN_PASSWORD", "goodgooddiets5")
-    if password != expected_password:
-        raise HTTPException(status_code=401, detail="Invalid password")
+def login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE username = ? LIMIT 1", (username,))
+        user = cur.fetchone()
+        stored_password = user["hashed_password"] if user else None
+        if not stored_password:
+            raise HTTPException(status_code=401, detail="user doesn't exist")
+
+        verified = verify_password(password, stored_password)
+        if not verified:
+            raise HTTPException(status_code=401, detail="Invalid username or password")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
 
     response = JSONResponse({"detail": "Login Successful"}, status_code=200)
     # --- SET AUTH COOKIE HERE ---
     response.set_cookie(
         key="auth_token",
-        value=password,
+        value=stored_password,
         httponly=True,        # JS cannot read
+        secure=False,         # True in prod (HTTPS)
+        samesite="lax",       # Same-domain
+        path="/",
+        max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),      # 1 hour default
+    )
+
+    # --- SET USER HERE ---
+    response.set_cookie(
+        key="curr_user",
+        value=user,
+        httponly=False,        # JS can read
         secure=False,         # True in prod (HTTPS)
         samesite="lax",       # Same-domain
         path="/",
@@ -106,26 +175,27 @@ def login_submit(request: Request, password: str = Form(...)):
     )
     return response
 
-@app.post("/logout", dependencies=[Depends(verify_auth_token)])
-def logout():
+@app.post("/logout")
+def logout(user: dict = Depends(verify_auth_token_get_user)):
     response = RedirectResponse(url="/ui/login", status_code=303)
     response.delete_cookie(key="auth_token", path="/")
+    response.delete_cookie(key="curr_user", path="/")
     return response
 
-@app.get("/ui/diets", dependencies=[Depends(verify_auth_token)])
-def diet_details(request: Request, diet_name: str):
+@app.get("/ui/diets")
+def diet_details(request: Request, diet_name: str, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("diets.html", {"request": request, "diet_name": diet_name})
     
-@app.get("/ui/foods", dependencies=[Depends(verify_auth_token)])
-def all_foods(request: Request):
+@app.get("/ui/foods")
+def all_foods(request: Request, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("foods.html", {"request": request})
 
-@app.get("/ui/foods/edit/{fdc_id}", dependencies=[Depends(verify_auth_token)])
-def edit_food(request: Request, fdc_id: int):
+@app.get("/ui/foods/edit/{fdc_id}")
+def edit_food(request: Request, fdc_id: int, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("foods_edit.html", {"request": request, "fdc_id": fdc_id})
 
-@app.get("/ui/settings", dependencies=[Depends(verify_auth_token)])
-def settings_page(request: Request):
+@app.get("/ui/settings")
+def settings_page(request: Request, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("settings.html", {"request": request})
 
 
@@ -134,19 +204,20 @@ def settings_page(request: Request):
 
 
 
-@app.get("/api/foods", dependencies=[Depends(verify_auth_token)])
-@app.get("/api/foods/{fdc_id}", dependencies=[Depends(verify_auth_token)])
-def get_foods(fdc_id: int | None = None):
+@app.get("/api/foods")
+@app.get("/api/foods/{fdc_id}")
+def get_foods(fdc_id: int | None = None, user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         if fdc_id is None:
-            cur.execute("SELECT * FROM foods")
+            cur.execute("SELECT * FROM foods WHERE user_id = ? ORDER BY fdc_id ASC", (user_id,))
             rows = cur.fetchall()
             return [dict(row) for row in rows]
-        cur.execute("SELECT * FROM foods WHERE fdc_id = ? ORDER BY fdc_id ASC", (fdc_id,))
+        cur.execute("SELECT * FROM foods WHERE fdc_id = ? AND user_id = ?", (fdc_id, user_id))
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Food not found")
@@ -159,8 +230,9 @@ def get_foods(fdc_id: int | None = None):
         if conn is not None:
             conn.close()
 
-@app.put("/api/foods/{fdcid}", dependencies=[Depends(verify_auth_token)])
-def update_food(fdcid: int, payload: dict = Body(...)):
+@app.put("/api/foods/{fdcid}")
+def update_food(fdcid: int, payload: dict = Body(...), user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
@@ -169,38 +241,58 @@ def update_food(fdcid: int, payload: dict = Body(...)):
         cols = [row[1] for row in cur.fetchall()]
         valid_cols = set(cols)
 
+        new_fdc_id = None
+        if payload and "fdc_id" in payload:
+            try:
+                new_fdc_id = int(payload.get("fdc_id"))
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid fdc_id")
+            if new_fdc_id <= 0:
+                raise HTTPException(status_code=400, detail="Invalid fdc_id")
+            if new_fdc_id != fdcid:
+                cur.execute("SELECT 1 FROM foods WHERE fdc_id = ? AND user_id = ?", (new_fdc_id, user_id))
+                if cur.fetchone() is not None:
+                    raise HTTPException(status_code=400, detail="fdc_id already exists")
+
         updates = {}
         for key, value in (payload or {}).items():
             if key == "fdc_id":
                 continue
             if key in valid_cols:
                 updates[key] = value
+        if new_fdc_id is not None and new_fdc_id != fdcid:
+            updates["fdc_id"] = new_fdc_id
 
         if not updates:
             raise HTTPException(status_code=400, detail="No valid fields to update")
 
         set_clause = ", ".join([f"\"{col.replace('\"', '\"\"')}\" = ?" for col in updates.keys()])
-        values = list(updates.values()) + [fdcid]
-        cur.execute(f"UPDATE foods SET {set_clause} WHERE fdc_id = ?", values)
+        values = list(updates.values()) + [fdcid, user_id]
+        cur.execute(f"UPDATE foods SET {set_clause} WHERE fdc_id = ? AND user_id = ?", values)
         conn.commit()
-        if cur.rowcount == 0:
+        foodRowsUpdated = cur.rowcount
+        if foodRowsUpdated == 0:
             raise HTTPException(status_code=404, detail="Food not found")
-        return {"updated": cur.rowcount}
+        
+        cur.execute('UPDATE foods SET "Vitamin K, total µg" = "Vitamin K (phylloquinone) µg" + "Vitamin K (Menaquinone-4) µg" + "Vitamin K (Menaquinone-7) µg" WHERE user_id = ?', (user_id,))
+        conn.commit()
+        return {"updated": foodRowsUpdated}
+
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        if conn is not None:
-            conn.close()
+        conn.close()
 
-@app.delete("/api/foods/{fdc_id}", dependencies=[Depends(verify_auth_token)])
-def delete_food(fdc_id: int):
+@app.delete("/api/foods/{fdc_id}")
+def delete_food(fdc_id: int, user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
-        cur.execute("DELETE FROM foods WHERE fdc_id = ?", (fdc_id,))
+        cur.execute("DELETE FROM foods WHERE fdc_id = ? AND user_id = ?", (fdc_id, user_id))
         conn.commit()
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="Food not found")
@@ -214,9 +306,9 @@ def delete_food(fdc_id: int):
             conn.close()
 
 
-@app.post("/api/foods/create_food_from_fdcid/{fdcid}", dependencies=[Depends(verify_auth_token)]) 
-def create_food_from_fdcid(fdcid: int, request: Request):
-
+@app.post("/api/foods/create_update_food_from_fdcid/{fdcid}") 
+def create_update_food_from_fdcid(fdcid: int, request: Request, user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
     #API Call to FDC to get food nutrition details
     httpx_client =  request.app.state.httpx_client
     url = "https://api.nal.usda.gov/fdc/v1/food/" + str(fdcid) + "?api_key=8yYwQ5HS4ddjLaDMsKIkTH8xCUOgucZqrLgcJuSP"
@@ -235,19 +327,20 @@ def create_food_from_fdcid(fdcid: int, request: Request):
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
         #Get the food record from local db first
-        cur.execute("SELECT * from foods where fdc_id = ?", (fdcid,))
+        cur.execute("SELECT * from foods where fdc_id = ? AND user_id = ?", (fdcid, user_id))
         record = cur.fetchone()
 
         #Create new record for the food if food doesn't exist in local DB
         if record is None:
+            created = True
             cur.execute(
-                "INSERT INTO foods ('fdc_id','Name','Serving Size','Unit') VALUES (?, ?, ?, ?);",
-                (fdcid, foodname, 100, "grams"),
+                "INSERT INTO foods ('user_id','fdc_id','Name','Serving Size','Unit') VALUES (?, ?, ?, ?, ?);",
+                (user_id, fdcid, foodname, 100, "grams"),
             )
             conn.commit()
             print("New food inserted: " + foodname)
         else:
-            return "Error: Food %d %s already exists in DB. Nothing was changed." % (fdcid, foodname)
+            created = False
 
         #Get all cols of food table
         cur.execute("PRAGMA table_info(foods)")
@@ -269,7 +362,7 @@ def create_food_from_fdcid(fdcid: int, request: Request):
                 if matching_table_col_name not in table_cols:
                     safe_col = matching_table_col_name.replace('"', '""')
                     cur.execute(
-                        'ALTER TABLE foods ADD "%s" DECIMAL NOT NULL DEFAULT 0;' % safe_col
+                        'ALTER TABLE foods ADD "%s" REAL NOT NULL DEFAULT 0;' % safe_col
                     )
                     conn.commit()
                     print(matching_table_col_name + " Col Created")
@@ -277,94 +370,33 @@ def create_food_from_fdcid(fdcid: int, request: Request):
                 #Update all the "nutrient" column values in DB for the food
                 safe_col = matching_table_col_name.replace('"', '""')
                 cur.execute(
-                    'UPDATE foods SET "%s" = ? WHERE fdc_id = ?;' % safe_col,
-                    (nutrient['amount'], fdcid),
+                    'UPDATE foods SET "%s" = ? WHERE fdc_id = ? AND user_id = ?;' % safe_col,
+                    (nutrient['amount'], fdcid, user_id),
                 )
                 conn.commit()
+        
+        #do the total vitamin K calculation
+        cur.execute('UPDATE foods SET "Vitamin K, total µg" = "Vitamin K (phylloquinone) µg" + "Vitamin K (Menaquinone-4) µg" + "Vitamin K (Menaquinone-7) µg" WHERE fdc_id = ?', (fdcid,))
+        conn.commit()
     finally:
         if conn is not None:
             conn.close()
 
-    return "Food %d %s created" % (fdcid, foodname)
-
-
-@app.put("/api/foods/update_food_from_fdcid/{fdcid}", dependencies=[Depends(verify_auth_token)]) 
-def update_food_from_fdcid(fdcid: int, request: Request):
-    #API Call to FDC to get food nutrition details
-    httpx_client =  request.app.state.httpx_client
-    url = "https://api.nal.usda.gov/fdc/v1/food/" + str(fdcid) + "?api_key=8yYwQ5HS4ddjLaDMsKIkTH8xCUOgucZqrLgcJuSP"
-    try:
-        resp = httpx_client.get(url)
-        resp.raise_for_status()
-        food = resp.json()
-        foodname = food['description']
-    except Exception as e:
-        handle_httpx_exception(e)
-
-    #Set DB Conn
-    conn = None
-    try:
-        conn = sqlite3.connect(get_db_path())
-        cur = conn.cursor()
-        #Get the food record from local db first
-        cur.execute("SELECT * from foods where fdc_id = ?", (fdcid,))
-        record = cur.fetchone()
-
-        #Exit if the food doesn't exist in local DB
-        if record is None:
-            return "Error: Food FDCID %d (%s) does not exist in DB. Nothing was changed." % (fdcid, foodname)
-
-        #Get all cols of food table
-        cur.execute("PRAGMA table_info(foods)")
-        cols = cur.fetchall()
-        table_cols = []
-        for col in cols:
-            table_cols.append(col[1].strip())
-
-        for nutrient in food['foodNutrients']:
-
-            unwanted = re.search("^PUFA|^MUFA|^TFA|^SFA|^Water|^Ash", nutrient['nutrient']['name']) #I don't have those PUFA MUFA TFA SFA data
-
-            #if nutrient entry has amount and not in unwanted list
-            #Some of them don't have amount, so useless we skip
-            if "amount" in nutrient and not unwanted:
-                matching_table_col_name = nutrient['nutrient']['name'] + " " + nutrient['nutrient']['unitName']
-
-                #create relevant nutrient column if the column doesn't exist
-                if matching_table_col_name not in table_cols:
-                    safe_col = matching_table_col_name.replace('"', '""')
-                    cur.execute(
-                        'ALTER TABLE foods ADD "%s" DECIMAL NOT NULL DEFAULT 0;' % safe_col
-                    )
-                    conn.commit()
-                    print(matching_table_col_name + " Col Created")
-
-                #Update all the "nutrient" column values in DB for the food
-                safe_col = matching_table_col_name.replace('"', '""')
-                cur.execute(
-                    'UPDATE foods SET "%s" = ? WHERE fdc_id = ?;' % safe_col,
-                    (nutrient['amount'], fdcid),
-                )
-                conn.commit()
-    finally:
-        if conn is not None:
-            conn.close()
-    
-    return "Food %d %s updated" % (fdcid, foodname)
+    return f"Food {fdcid} {foodname} {'created' if created else 'updated'}"
 
 
 
-@app.get("/api/diets/{diet_name}", dependencies=[Depends(verify_auth_token)])
-def get_diets(diet_name: str = "*"):
+@app.get("/api/diets/{diet_name}")
+def get_diets(diet_name: str = "*", user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         if diet_name == "*":
-            cur.execute("SELECT * FROM diets")
+            cur.execute("SELECT * FROM diets WHERE user_id = ?", (user["id"],))
         else:
-            cur.execute("SELECT * FROM diets WHERE diet_name = ?",(diet_name,))
+            cur.execute("SELECT * FROM diets WHERE diet_name = ? AND user_id = ?",(diet_name, user["id"]))
 
         rows = cur.fetchall()
         return rows
@@ -374,17 +406,17 @@ def get_diets(diet_name: str = "*"):
         if conn is not None:
             conn.close()
 
-@app.get("/api/diets/{diet_name}/nutrition", dependencies=[Depends(verify_auth_token)])
-def diets_nutrition(diet_name: str):
+@app.get("/api/diets/{diet_name}/nutrition")
+def diets_nutrition(diet_name: str, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT diets.* FROM diets WHERE diets.diet_name = ?", (diet_name,))
+        cur.execute("SELECT diets.* FROM diets WHERE diets.diet_name = ? AND user_id = ?", (diet_name, user["id"]))
         diet_items = [dict(row) for row in cur.fetchall()]
 
-        cur.execute("SELECT * FROM foods")
+        cur.execute("SELECT * FROM foods WHERE user_id = ?", (user["id"],))
         foods = [dict(row) for row in cur.fetchall()]
 
         foods_by_id = {}
@@ -426,8 +458,8 @@ def diets_nutrition(diet_name: str):
         if conn is not None:
             conn.close()
 
-@app.get("/api/rda", dependencies=[Depends(verify_auth_token)])
-def get_rda():
+@app.get("/api/rda")
+def get_rda(user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
@@ -442,8 +474,8 @@ def get_rda():
         if conn is not None:
             conn.close()
 
-@app.get("/api/ul", dependencies=[Depends(verify_auth_token)])
-def get_ul():
+@app.get("/api/ul")
+def get_ul(user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
@@ -458,18 +490,18 @@ def get_ul():
         if conn is not None:
             conn.close()
 
-@app.post("/api/diet", dependencies=[Depends(verify_auth_token)])
-def create_diet(payload: DietCreate):
+@app.post("/api/diet")
+def create_diet(payload: DietCreate, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
         cur.execute(
             """
-            INSERT INTO diets (diet_name, fdc_id, quantity, sort_order, color)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO diets (user_id, diet_name, fdc_id, quantity, sort_order, color)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (payload.diet_name, payload.fdc_id, payload.quantity, payload.sort_order, payload.color),
+            (user["id"], payload.diet_name, payload.fdc_id, payload.quantity, payload.sort_order, payload.color),
         )
         conn.commit()
         return {"created": cur.rowcount}
@@ -479,12 +511,13 @@ def create_diet(payload: DietCreate):
         if conn is not None:
             conn.close()
 
-@app.put("/api/diet", dependencies=[Depends(verify_auth_token)])
-def update_diet(payload: DietUpdate):
+@app.put("/api/diet")
+def update_diet(payload: DietUpdate, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
+        user_id = user["id"]
         original_fdc_id = payload.original_fdc_id if payload.original_fdc_id is not None else payload.fdc_id
         original_quantity = payload.original_quantity if payload.original_quantity is not None else payload.quantity
         original_sort_order = payload.original_sort_order if payload.original_sort_order is not None else payload.sort_order
@@ -492,7 +525,7 @@ def update_diet(payload: DietUpdate):
             """
             UPDATE diets
             SET diet_name = ?, fdc_id = ?, quantity = ?, sort_order = ?, color = ?
-            WHERE diet_name = ? AND fdc_id = ? AND quantity = ? AND sort_order = ?
+            WHERE user_id = ? AND diet_name = ? AND fdc_id = ? AND quantity = ? AND sort_order = ?
             """,
             (
                 payload.diet_name,
@@ -500,6 +533,7 @@ def update_diet(payload: DietUpdate):
                 payload.quantity,
                 payload.sort_order,
                 payload.color,
+                user_id,
                 payload.diet_name,
                 original_fdc_id,
                 original_quantity,
@@ -518,21 +552,22 @@ def update_diet(payload: DietUpdate):
         if conn is not None:
             conn.close()
 
-@app.delete("/api/diet", dependencies=[Depends(verify_auth_token)])
-def delete_diet(payload: DietDelete):
+@app.delete("/api/diet")
+def delete_diet(payload: DietDelete, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
+        user_id = user["id"]
         if payload.delete_all:
-            cur.execute("DELETE FROM diets WHERE diet_name = ?", (payload.diet_name,))
+            cur.execute("DELETE FROM diets WHERE diet_name = ? AND user_id = ?", (payload.diet_name, user["id"]))
         else:
             cur.execute(
                 """
                 DELETE FROM diets
-                WHERE diet_name = ? AND fdc_id = ? AND quantity = ? AND sort_order = ?
+                WHERE user_id = ? AND diet_name = ? AND fdc_id = ? AND quantity = ? AND sort_order = ?
                 """,
-                (payload.diet_name, payload.fdc_id, payload.quantity, payload.sort_order),
+                (user["id"], payload.diet_name, payload.fdc_id, payload.quantity, payload.sort_order),
             )
         conn.commit()
         if cur.rowcount == 0:
@@ -546,15 +581,15 @@ def delete_diet(payload: DietDelete):
         if conn is not None:
             conn.close()
 
-@app.put("/api/diet/name_only", dependencies=[Depends(verify_auth_token)])
-def update_diet_name_only(payload: DietNameUpdate):
+@app.put("/api/diet/name_only")
+def update_diet_name_only(payload: DietNameUpdate, user: dict = Depends(verify_auth_token_get_user)):
     conn = None
     try:
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
         cur.execute(
-            "UPDATE diets SET diet_name = ? WHERE diet_name = ?",
-            (payload.diet_name_new, payload.diet_name_old),
+            "UPDATE diets SET diet_name = ? WHERE diet_name = ? AND user_id = ?",
+            (payload.diet_name_new, payload.diet_name_old, user_id),
         )
         conn.commit()
         if cur.rowcount == 0:
@@ -591,4 +626,5 @@ def handle_httpx_exception(e: Exception):
             "traceback": traceback.format_exc(),
         },
     )
+
 

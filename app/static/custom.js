@@ -241,6 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
             : DIET_COLOR_SWATCHES_DARK;
     }
 
+
     function parseNumber(value) {
         if (typeof value === "number" && Number.isFinite(value)) {
             return value;
@@ -505,20 +506,9 @@ document.addEventListener("DOMContentLoaded", () => {
     initDominantColorPickers();
 
     if (foodsFdcForm && foodsFdcInput) {
-        function createFoodFromFdcId(fdcId) {
-            return fetch(`/api/foods/create_food_from_fdcid/${encodeURIComponent(fdcId)}`, {
+        function createOrUpdateFoodFromFdcId(fdcId) {
+            return fetch(`/api/foods/create_update_food_from_fdcid/${encodeURIComponent(fdcId)}`, {
                 method: "POST",
-            }).then((response) => {
-                if (!response.ok) {
-                    throw new Error(`Request failed with ${response.status}`);
-                }
-                return response.text();
-            });
-        }
-
-        function updateFoodFromFdcId(fdcId) {
-            return fetch(`/api/foods/update_food_from_fdcid/${encodeURIComponent(fdcId)}`, {
-                method: "PUT",
             }).then((response) => {
                 if (!response.ok) {
                     throw new Error(`Request failed with ${response.status}`);
@@ -535,19 +525,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             foodsFdcForm.querySelector("button[type='submit']").disabled = true;
-            fetch("/api/foods")
-                .then((response) => {
-                    if (!response.ok) {
-                        throw new Error(`Request failed with ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then((foods) => {
-                    const exists = Array.isArray(foods)
-                        ? foods.some((food) => Number(food?.fdc_id) === fdcId)
-                        : false;
-                    return exists ? updateFoodFromFdcId(fdcId) : createFoodFromFdcId(fdcId);
-                })
+            createOrUpdateFoodFromFdcId(fdcId)
                 .then((response) => {
                     alert(response);
                     foodsFdcInput.value = "";
@@ -598,7 +576,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const inputs = foodsEditFields.querySelectorAll("input[data-field]");
         const hasChanges = Array.from(inputs).some((input) => {
             const field = input.dataset.field;
-            if (!field || field === "fdc_id") {
+            if (!field) {
                 return false;
             }
             const current = getEditInputValue(input);
@@ -642,7 +620,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 input.type = "text";
             }
 
-            if (key === "fdc_id" || key === "Vitamin K, total µg") {
+            if (key === "Vitamin K, total µg") {
                 input.readOnly = true;
             }
 
@@ -690,7 +668,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                     payload[field] = getEditInputValue(input);
                 });
-                delete payload.fdc_id;
+                const originalFdcId = foodsEditOriginal.get("fdc_id");
+                const nextFdcId = payload.fdc_id;
 
                 foodsEditForm.querySelector("button[type='submit']").disabled = true;
                 fetch(`/api/foods/${encodeURIComponent(fdcId)}`, {
@@ -716,6 +695,13 @@ document.addEventListener("DOMContentLoaded", () => {
                             }
                             foodsEditOriginal.set(field, getEditInputValue(input));
                         });
+                        if (
+                            Number.isFinite(Number(nextFdcId)) &&
+                            Number(nextFdcId) !== Number(originalFdcId)
+                        ) {
+                            window.location.href = `/ui/foods/edit/${encodeURIComponent(Number(nextFdcId))}`;
+                            return;
+                        }
                     })
                     .catch((error) => {
                         alert(`Failed to update food: ${error.message}`);
@@ -2341,3 +2327,6 @@ document.addEventListener("DOMContentLoaded", () => {
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
 });
+
+
+

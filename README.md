@@ -14,8 +14,5 @@ Open the app in your browser:
 
 Notes:
 - Set required environment variables in a `.env` file:
-  - `EVALDIET_AUTH_USER`
-  - `EVALDIET_AUTH_PASS`
-  - `EVALDIET_AUTH_TTL` (optional, default `3600`)
-  - `EVALDIET_AUTH_SECRET` (optional, defaults to `EVALDIET_AUTH_PASS`)
-  - `EVALDIET_DB_PATH` (optional, default `app/evaldiet.db`)
+  - `AuthCookieExpireSecs` (default: `3600`)
+  - `EVALDIET_DB_PATH` (optional, default: `app/evaldiet.db`)
