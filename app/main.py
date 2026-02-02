@@ -823,6 +823,10 @@ def get_db_path() -> str:
 def get_db_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(get_db_path())
     conn.execute("PRAGMA foreign_keys = ON")
+    # Enforce FK support for every connection.
+    fk_enabled = conn.execute("PRAGMA foreign_keys").fetchone()
+    if not fk_enabled or fk_enabled[0] != 1:
+        raise RuntimeError("SQLite foreign_keys must be enabled.")
     return conn
 
 def handle_httpx_exception(e: Exception):

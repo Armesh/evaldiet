@@ -28,4 +28,5 @@ This repo is a small diet/foods web app. Use this file as the single source of t
 - For diet items table editing: do not auto-save mid-edit; save only when leaving edit mode (clicking outside/switching rows/Escape).
 - Always re-check the latest file state before answering questions about current contents.
 - In foods edit UI, "Vitamin K, total µg" is a generated field and must not be editable or shown.
+- SQLite must always enforce foreign keys.
 - Ask before making large structural changes.
