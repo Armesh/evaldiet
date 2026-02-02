@@ -63,6 +63,14 @@ def verify_password(plain: str, stored: str) -> bool:
     dk = hashlib.pbkdf2_hmac("sha256", str(plain).encode("utf-8"), salt, iterations)
     return hmac.compare_digest(dk, expected)
 
+def strip_user_id(data):
+    if isinstance(data, dict):
+        data.pop("user_id", None)
+        return data
+    if isinstance(data, list):
+        return [strip_user_id(item) for item in data]
+    return data
+
 def verify_auth_token_get_user(request: Request) -> dict:
     auth_token = request.cookies.get("auth_token")
 
@@ -216,12 +224,12 @@ def get_foods(fdc_id: int | None = None, user: dict = Depends(verify_auth_token_
         if fdc_id is None:
             cur.execute("SELECT * FROM foods WHERE user_id = ? ORDER BY fdc_id ASC", (user_id,))
             rows = cur.fetchall()
-            return [dict(row) for row in rows]
+            return strip_user_id([dict(row) for row in rows])
         cur.execute("SELECT * FROM foods WHERE fdc_id = ? AND user_id = ?", (fdc_id, user_id))
         row = cur.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="Food not found")
-        return dict(row)
+        return strip_user_id(dict(row))
     except HTTPException:
         raise
     except Exception as exc:
@@ -399,7 +407,7 @@ def get_diets(diet_name: str = "*", user: dict = Depends(verify_auth_token_get_u
             cur.execute("SELECT * FROM diets WHERE diet_name = ? AND user_id = ?",(diet_name, user["id"]))
 
         rows = cur.fetchall()
-        return rows
+        return strip_user_id([dict(row) for row in rows])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
@@ -414,10 +422,10 @@ def diets_nutrition(diet_name: str, user: dict = Depends(verify_auth_token_get_u
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("SELECT diets.* FROM diets WHERE diets.diet_name = ? AND user_id = ?", (diet_name, user["id"]))
-        diet_items = [dict(row) for row in cur.fetchall()]
+        diet_items = strip_user_id([dict(row) for row in cur.fetchall()])
 
         cur.execute("SELECT * FROM foods WHERE user_id = ?", (user["id"],))
-        foods = [dict(row) for row in cur.fetchall()]
+        foods = strip_user_id([dict(row) for row in cur.fetchall()])
 
         foods_by_id = {}
         for food in foods:
@@ -517,7 +525,6 @@ def update_diet(payload: DietUpdate, user: dict = Depends(verify_auth_token_get_
     try:
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
-        user_id = user["id"]
         original_fdc_id = payload.original_fdc_id if payload.original_fdc_id is not None else payload.fdc_id
         original_quantity = payload.original_quantity if payload.original_quantity is not None else payload.quantity
         original_sort_order = payload.original_sort_order if payload.original_sort_order is not None else payload.sort_order
@@ -533,7 +540,7 @@ def update_diet(payload: DietUpdate, user: dict = Depends(verify_auth_token_get_
                 payload.quantity,
                 payload.sort_order,
                 payload.color,
-                user_id,
+                user["id"],
                 payload.diet_name,
                 original_fdc_id,
                 original_quantity,
@@ -558,7 +565,6 @@ def delete_diet(payload: DietDelete, user: dict = Depends(verify_auth_token_get_
     try:
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
-        user_id = user["id"]
         if payload.delete_all:
             cur.execute("DELETE FROM diets WHERE diet_name = ? AND user_id = ?", (payload.diet_name, user["id"]))
         else:
@@ -589,7 +595,7 @@ def update_diet_name_only(payload: DietNameUpdate, user: dict = Depends(verify_a
         cur = conn.cursor()
         cur.execute(
             "UPDATE diets SET diet_name = ? WHERE diet_name = ? AND user_id = ?",
-            (payload.diet_name_new, payload.diet_name_old, user_id),
+            (payload.diet_name_new, payload.diet_name_old, user["id"]),
         )
         conn.commit()
         if cur.rowcount == 0:
