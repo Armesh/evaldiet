@@ -21,7 +21,7 @@
               <p class="text-muted small mb-3">
                 Update your username or password. Leave the password fields blank to keep your current password.
               </p>
-              <form id="update-profile-form" data-user-id="{{ user.id }}">
+              <form id="update-profile-form">
                 <div class="mb-3">
                   <label class="form-label" for="update-username">Username</label>
                   <input
@@ -31,7 +31,6 @@
                     class="form-control"
                     autocomplete="username"
                     required
-                    value="{{ user.username }}"
                   />
                 </div>
                 <div class="mb-3">
@@ -81,7 +80,7 @@
       return;
     }
 
-    const originalUsername = (usernameInput.value || "").trim();
+    let originalUsername = "";
 
     function setStatus(message, isError) {
       status.textContent = message;
@@ -89,9 +88,30 @@
       status.classList.toggle("text-muted", !isError);
     }
 
+    function loadCurrentUser() {
+      setStatus("Loading...");
+      fetch("/api/users/me", { credentials: "same-origin" })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Failed to load user.");
+          }
+          return response.json();
+        })
+        .then((user) => {
+          const name = (user?.username || "").trim();
+          usernameInput.value = name;
+          originalUsername = name;
+          setStatus("");
+        })
+        .catch((error) => {
+          setStatus(error.message || "Failed to load user.", true);
+        });
+    }
+
+    loadCurrentUser();
+
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      const userId = form.dataset.userId;
       const username = (usernameInput.value || "").trim();
       const password = passwordInput.value || "";
       const confirm = confirmInput.value || "";
@@ -121,7 +141,7 @@
       }
 
       setStatus("Saving...");
-      fetch(`/api/users/${encodeURIComponent(userId)}`, {
+      fetch("/api/users/me", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",

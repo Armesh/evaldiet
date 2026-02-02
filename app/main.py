@@ -73,21 +73,6 @@ def strip_user_id(data):
         return [strip_user_id(item) for item in data]
     return data
 
-def user_cookie_payload(user_row) -> str:
-    if user_row is None:
-        return ""
-    if isinstance(user_row, dict):
-        data = dict(user_row)
-    elif isinstance(user_row, sqlite3.Row):
-        data = dict(user_row)
-    else:
-        try:
-            data = dict(user_row)
-        except Exception:
-            return ""
-    data.pop("hashed_password", None)
-    return json.dumps(data, separators=(",", ":"))
-
 def verify_auth_token_get_user(request: Request) -> dict:
     auth_token = request.cookies.get("auth_token")
 
@@ -240,15 +225,6 @@ def register_submit(
         path="/",
         max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),
     )
-    response.set_cookie(
-        key="curr_user",
-        value=user_cookie_payload(created_user or {"id": user_id, "username": username}),
-        httponly=False,
-        secure=False,
-        samesite="lax",
-        path="/",
-        max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),
-    )
     response.delete_cookie(key="reg_code", path="/")
     return response
 
@@ -287,24 +263,12 @@ def login_submit(request: Request, username: str = Form(...), password: str = Fo
         path="/",
         max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),      # 1 hour default
     )
-
-    # --- SET USER HERE ---
-    response.set_cookie(
-        key="curr_user",
-        value=user_cookie_payload(user),
-        httponly=False,        # JS can read
-        secure=False,         # True in prod (HTTPS)
-        samesite="lax",       # Same-domain
-        path="/",
-        max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),      # 1 hour default
-    )
     return response
 
 @app.post("/logout")
 def logout(user: dict = Depends(verify_auth_token_get_user)):
     response = RedirectResponse(url="/ui/login", status_code=303)
     response.delete_cookie(key="auth_token", path="/")
-    response.delete_cookie(key="curr_user", path="/")
     return response
 
 @app.get("/ui/diets")
@@ -330,14 +294,31 @@ def update_profile_page(request: Request, user: dict = Depends(verify_auth_token
 
 
 
+@app.get("/api/users/me")
+def get_me(user: dict = Depends(verify_auth_token_get_user)):
+    conn = get_db_conn()
+    try:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id= ? LIMIT 1", (user["id"],))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = dict(row)
+        user.pop("hashed_password", None)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        conn.close()
+    return JSONResponse(user)
 
 
 
-@app.put("/api/users/{user_id}")
-def update_user(user_id: int, payload: dict = Body(...), user: dict = Depends(verify_auth_token_get_user)):
-    if user_id != user.get("id"):
-        raise HTTPException(status_code=403, detail="Forbidden")
-
+@app.put("/api/users/me")
+def update_me(payload: dict = Body(...), user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
     username = payload.get("username") if isinstance(payload, dict) else None
     password = payload.get("password") if isinstance(payload, dict) else None
 
@@ -356,6 +337,18 @@ def update_user(user_id: int, payload: dict = Body(...), user: dict = Depends(ve
             raise HTTPException(status_code=400, detail="Password is required")
         new_hashed_password = hash_password(password)
         updates["hashed_password"] = new_hashed_password
+
+    if isinstance(payload, dict) and "settings" in payload:
+        settings_payload = payload.get("settings")
+        try:
+            if isinstance(settings_payload, str):
+                json.loads(settings_payload)
+                settings_json = settings_payload
+            else:
+                settings_json = json.dumps(settings_payload)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid settings payload")
+        updates["settings"] = settings_json
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -383,19 +376,6 @@ def update_user(user_id: int, payload: dict = Body(...), user: dict = Depends(ve
         if conn is not None:
             conn.close()
 
-    updated_user = None
-    try:
-        conn = get_db_conn()
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE id = ? LIMIT 1", (user_id,))
-        updated_user = cur.fetchone()
-    except Exception:
-        updated_user = None
-    finally:
-        if conn is not None:
-            conn.close()
-
     response = JSONResponse({"updated": True}, status_code=200)
     max_age = int(os.environ.get("AuthCookieExpireSecs", 3600))
     if new_hashed_password:
@@ -408,17 +388,38 @@ def update_user(user_id: int, payload: dict = Body(...), user: dict = Depends(ve
             path="/",
             max_age=max_age,
         )
-    if "username" in updates:
-        response.set_cookie(
-            key="curr_user",
-            value=user_cookie_payload(updated_user or {"id": user_id, "username": username}),
-            httponly=False,
-            secure=False,
-            samesite="lax",
-            path="/",
-            max_age=max_age,
-        )
     return response
+
+@app.post("/api/users/me/reset_settings")
+def reset_user_settings(user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
+    conn = None
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT dflt_value FROM pragma_table_info('users') WHERE name = 'settings'")
+        row = cur.fetchone()
+        if not row or row[0] is None:
+            raise HTTPException(status_code=500, detail="Settings default not defined")
+        default_value = str(row[0])
+        if len(default_value) >= 2 and default_value[0] == default_value[-1] and default_value[0] in ("'", '"'):
+            default_value = default_value[1:-1]
+        try:
+            parsed = json.loads(default_value)
+        except Exception:
+            raise HTTPException(status_code=500, detail="Invalid settings default JSON")
+        cur.execute("UPDATE users SET settings = ? WHERE id = ?", (default_value, user_id))
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        return JSONResponse({"settings": parsed}, status_code=200)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
 
 @app.get("/api/foods")
 @app.get("/api/foods/{fdc_id}")

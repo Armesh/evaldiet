@@ -12,14 +12,26 @@ function getCookie(name) {
   return null;
 }
 
+let userSettingsCache = null;
+let userSettingsPromise = null;
+
+function coerceBoolean(value, fallback = false) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") {
+        if (value === "true") return true;
+        if (value === "false") return false;
+    }
+    return fallback;
+}
+
+function coerceNumber(value, fallback) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : fallback;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     const DIET_COLOR_SWATCHES_DARK = ["#971d1f", "#ad5322", "#af882e", "#538d28", "#2b8066", "#375875"];
     const DIET_COLOR_SWATCHES_LIGHT = ["#d86a6b", "#d68a5a", "#d6b46a", "#8cc26a", "#6bb59c", "#7aa0b5"];
-    const FOOD_DOMINANT_DEFAULTS = {
-        protein: "#b34a4a",
-        carb: "#435fb9",
-        fat: "#c9ab3d",
-    };
     const body = document.body;
     body.setAttribute("data-bs-theme", localStorage.getItem("theme"));
     document.documentElement.style.colorScheme = localStorage.getItem("theme");
@@ -233,7 +245,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const foodColorProtein = document.getElementById("food-color-protein");
     const foodColorCarb = document.getElementById("food-color-carb");
     const foodColorFat = document.getElementById("food-color-fat");
-    const foodColorReset = document.getElementById("food-color-reset");
 
     function getDietColorSwatches() {
         return localStorage.getItem("theme") === "light"
@@ -266,66 +277,63 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function applyDominantColorsFromStorage() {
-        if (!localStorage.getItem("food-dominant-protein")) {
-            localStorage.setItem("food-dominant-protein", FOOD_DOMINANT_DEFAULTS.protein);
-        }
-        if (!localStorage.getItem("food-dominant-carb")) {
-            localStorage.setItem("food-dominant-carb", FOOD_DOMINANT_DEFAULTS.carb);
-        }
-        if (!localStorage.getItem("food-dominant-fat")) {
-            localStorage.setItem("food-dominant-fat", FOOD_DOMINANT_DEFAULTS.fat);
-        }
-        const defaults = { ...FOOD_DOMINANT_DEFAULTS };
+        const settings = getUserSettings();
         const stored = {
-            protein: localStorage.getItem("food-dominant-protein") || defaults.protein,
-            carb: localStorage.getItem("food-dominant-carb") || defaults.carb,
-            fat: localStorage.getItem("food-dominant-fat") || defaults.fat,
+            protein: typeof settings["food-dominant-protein"] === "string"
+                ? settings["food-dominant-protein"]
+                : "",
+            carb: typeof settings["food-dominant-carb"] === "string"
+                ? settings["food-dominant-carb"]
+                : "",
+            fat: typeof settings["food-dominant-fat"] === "string"
+                ? settings["food-dominant-fat"]
+                : "",
         };
         setDominantColorVars(stored);
-        return { defaults, stored };
+        return { stored };
     }
 
     function initDominantColorPickers() {
         if (!foodColorProtein || !foodColorCarb || !foodColorFat) {
             return;
         }
-        const { defaults, stored } = applyDominantColorsFromStorage();
-        foodColorProtein.value = stored.protein;
-        foodColorCarb.value = stored.carb;
-        foodColorFat.value = stored.fat;
+        let colorSaveTimer = null;
+        function scheduleColorSave(nextSettings) {
+            if (colorSaveTimer) {
+                clearTimeout(colorSaveTimer);
+            }
+            colorSaveTimer = setTimeout(() => {
+                colorSaveTimer = null;
+                saveUserSettings(nextSettings).catch(() => {});
+            }, 250);
+        }
+        const { stored } = applyDominantColorsFromStorage();
+        if (stored.protein) {
+            foodColorProtein.value = stored.protein;
+        }
+        if (stored.carb) {
+            foodColorCarb.value = stored.carb;
+        }
+        if (stored.fat) {
+            foodColorFat.value = stored.fat;
+        }
 
         foodColorProtein.addEventListener("input", () => {
             const value = foodColorProtein.value;
-            localStorage.setItem("food-dominant-protein", value);
             setDominantColorVars({ protein: value });
+            scheduleColorSave({ ...getUserSettings(), "food-dominant-protein": value });
         });
         foodColorCarb.addEventListener("input", () => {
             const value = foodColorCarb.value;
-            localStorage.setItem("food-dominant-carb", value);
             setDominantColorVars({ carb: value });
+            scheduleColorSave({ ...getUserSettings(), "food-dominant-carb": value });
         });
         foodColorFat.addEventListener("input", () => {
             const value = foodColorFat.value;
-            localStorage.setItem("food-dominant-fat", value);
             setDominantColorVars({ fat: value });
+            scheduleColorSave({ ...getUserSettings(), "food-dominant-fat": value });
         });
 
-        if (foodColorReset) {
-            foodColorReset.addEventListener("click", () => {
-                localStorage.removeItem("food-dominant-protein");
-                localStorage.removeItem("food-dominant-carb");
-                localStorage.removeItem("food-dominant-fat");
-                const resetValues = {
-                    protein: defaults.protein,
-                    carb: defaults.carb,
-                    fat: defaults.fat,
-                };
-                setDominantColorVars(resetValues);
-                foodColorProtein.value = resetValues.protein;
-                foodColorCarb.value = resetValues.carb;
-                foodColorFat.value = resetValues.fat;
-            });
-        }
     }
 
     function getDominantNutrient(food) {
@@ -502,8 +510,7 @@ document.addEventListener("DOMContentLoaded", () => {
         foodsTable._deleteHandlerAttached = true;
     }
 
-    applyDominantColorsFromStorage();
-    initDominantColorPickers();
+    let settingsReady = null;
 
     if (foodsFdcForm && foodsFdcInput) {
         function createOrUpdateFoodFromFdcId(fdcId) {
@@ -720,43 +727,94 @@ document.addEventListener("DOMContentLoaded", () => {
     const dietRdaThresholdKey = "diet_rda_threshold";
     const dietUlThresholdKey = "diet_ul_threshold";
     const dietHideRdaUlValuesKey = "diet_hide_rda_ul_values";
-    const defaultRdaThreshold = 70;
-    const defaultUlThreshold = 100;
     const requiredDietColumns = ["diet_name", "fdc_id", "quantity", "sort_order", "color"];
-    const defaultDietColumns = [
-        ...requiredDietColumns,
-        "Name",
-        "Unit",
-        "Price",
-        "Energy kcal",
-        "Protein g",
-        "Total lipid (fat) g",
-        "Carbohydrate, by difference g",
-        "Fiber, total dietary g",
-        "Calcium, Ca mg",
-        "Iron, Fe mg",
-        "Magnesium, Mg mg",
-        "Phosphorus, P mg",
-        "Potassium, K mg",
-        "Sodium, Na mg",
-        "Zinc, Zn mg",
-        "Copper, Cu mg",
-        "Selenium, Se µg",
-        "Vitamin C, total ascorbic acid mg",
-        "Thiamin mg",
-        "Riboflavin mg",
-        "Niacin mg",
-        "Pantothenic acid mg",
-        "Vitamin B-6 mg",
-        "Folate, total µg",
-        "Vitamin B-12 µg",
-        "Choline, total mg",
-        "Vitamin A, RAE µg",
-        "Cholesterol mg",
-        "Fatty acids, total saturated g",
-        "Vitamin E (alpha-tocopherol) mg",
-        "Vitamin K, total µg",
-    ];
+
+    function normalizeSettings(settings) {
+        const source = settings && typeof settings === "object" ? settings : {};
+        const normalized = { ...source };
+        if (!Array.isArray(normalized.diet_columns)) {
+            normalized.diet_columns = [];
+        }
+        normalized.diet_columns = normalizeDietColumns(normalized.diet_columns);
+        const hideValues = coerceBoolean(normalized.diet_hide_rda_ul_values, undefined);
+        if (hideValues !== undefined) {
+            normalized.diet_hide_rda_ul_values = hideValues;
+        }
+        const rdaValue = coerceNumber(normalized.diet_rda_threshold, undefined);
+        if (rdaValue !== undefined) {
+            normalized.diet_rda_threshold = rdaValue;
+        }
+        const ulValue = coerceNumber(normalized.diet_ul_threshold, undefined);
+        if (ulValue !== undefined) {
+            normalized.diet_ul_threshold = ulValue;
+        }
+        if (typeof normalized["food-dominant-carb"] !== "string") {
+            delete normalized["food-dominant-carb"];
+        }
+        if (typeof normalized["food-dominant-fat"] !== "string") {
+            delete normalized["food-dominant-fat"];
+        }
+        if (typeof normalized["food-dominant-protein"] !== "string") {
+            delete normalized["food-dominant-protein"];
+        }
+        return normalized;
+    }
+
+    function getUserSettings() {
+        return userSettingsCache || {};
+    }
+
+    function loadUserSettings() {
+        if (userSettingsPromise) {
+            return userSettingsPromise;
+        }
+        userSettingsPromise = fetch("/api/users/me", { credentials: "same-origin" })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((user) => {
+                let settings = user?.settings;
+                if (typeof settings === "string") {
+                    try {
+                        settings = JSON.parse(settings);
+                    } catch {
+                        settings = null;
+                    }
+                }
+                userSettingsCache = normalizeSettings(settings || {});
+                return userSettingsCache;
+            })
+            .catch(() => {
+                userSettingsCache = normalizeSettings({});
+                return userSettingsCache;
+            });
+        return userSettingsPromise;
+    }
+
+    function saveUserSettings(nextSettings) {
+        const normalized = normalizeSettings(nextSettings || {});
+        return fetch("/api/users/me", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ settings: normalized }),
+        }).then((response) => {
+            if (!response.ok) {
+                throw new Error(`Request failed with ${response.status}`);
+            }
+            userSettingsCache = normalized;
+            return normalized;
+        });
+    }
+
+    settingsReady = loadUserSettings();
+    settingsReady.finally(() => {
+        applyDominantColorsFromStorage();
+        initDominantColorPickers();
+    });
 
     function normalizeDietColumns(columns) {
         const normalized = Array.from(new Set(columns));
@@ -769,42 +827,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function getSelectedDietColumns() {
-        const fallback = normalizeDietColumns(defaultDietColumns);
-        if (!localStorage.getItem(dietColumnsStorageKey)) {
-            localStorage.setItem(dietColumnsStorageKey, JSON.stringify(fallback));
-            return fallback.slice();
-        }
-        try {
-            const stored = JSON.parse(localStorage.getItem(dietColumnsStorageKey));
-            if (Array.isArray(stored) && stored.length > 0) {
-                const normalized = normalizeDietColumns(stored);
-                localStorage.setItem(dietColumnsStorageKey, JSON.stringify(normalized));
-                return normalized;
-            }
-        } catch {
-            // fall through to default
-        }
-        localStorage.setItem(dietColumnsStorageKey, JSON.stringify(fallback));
-        return fallback.slice();
+        const settings = getUserSettings();
+        const columns = Array.isArray(settings.diet_columns) ? settings.diet_columns : [];
+        return normalizeDietColumns(columns).slice();
     }
 
     function initDietSettings() {
         if (window.location.pathname !== "/ui/settings") {
             return;
         }
+        return loadUserSettings().then(() => {
         const list = document.getElementById("diet-columns-list");
         const saveBtn = document.getElementById("diet-columns-save");
-        const resetBtn = document.getElementById("diet-columns-reset");
         const status = document.getElementById("diet-columns-status");
         const countBadge = document.getElementById("diet-columns-selected-count");
         const toast = document.getElementById("diet-columns-toast");
+        const resetAllBtn = document.getElementById("settings-reset-all");
+        const resetAllStatus = document.getElementById("settings-reset-status");
         const rdaThresholdInput = document.getElementById("diet-rda-threshold");
         const ulThresholdInput = document.getElementById("diet-ul-threshold");
         const hideRdaUlValuesInput = document.getElementById("diet-hide-rda-ul-values");
-        const thresholdsSaveBtn = document.getElementById("diet-thresholds-save");
-        const thresholdsResetBtn = document.getElementById("diet-thresholds-reset");
         const thresholdsStatus = document.getElementById("diet-thresholds-status");
-        if (!list || !saveBtn || !resetBtn) {
+        if (!list || !saveBtn) {
             return;
         }
         let originalSelection = new Set(getSelectedDietColumns());
@@ -910,7 +954,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     const cols = Object.keys(firstFood || {});
                     const unique = Array.from(new Set(cols));
                     const allColumns = Array.from(
-                        new Set([...defaultDietColumns, ...unique, ...getSelectedDietColumns()])
+                        new Set([...unique, ...getSelectedDietColumns()])
                     );
                     console.log("Diet columns:", allColumns);
                     renderList(allColumns);
@@ -920,7 +964,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 })
                 .catch((error) => {
                     const selected = getSelectedDietColumns();
-                    const allColumns = Array.from(new Set([...defaultDietColumns, ...selected]));
+                    const allColumns = Array.from(new Set([...selected]));
                     console.log("Diet columns:", allColumns);
                     renderList(allColumns);
                     originalSelection = new Set(getSelectedDietColumns());
@@ -929,26 +973,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
         }
 
-        function getThresholdValue(key, fallback) {
-            const raw = localStorage.getItem(key);
-            if (raw === null || raw === "") {
-                return fallback;
-            }
-            const value = Number(raw);
-            return Number.isFinite(value) ? value : fallback;
-        }
-
         function setThresholdInputs() {
+            const settings = getUserSettings();
             if (rdaThresholdInput) {
-                rdaThresholdInput.value = String(getThresholdValue(dietRdaThresholdKey, defaultRdaThreshold));
+                const rdaValue = coerceNumber(settings[dietRdaThresholdKey], undefined);
+                rdaThresholdInput.value = rdaValue === undefined ? "" : String(rdaValue);
             }
             if (ulThresholdInput) {
-                ulThresholdInput.value = String(getThresholdValue(dietUlThresholdKey, defaultUlThreshold));
+                const ulValue = coerceNumber(settings[dietUlThresholdKey], undefined);
+                ulThresholdInput.value = ulValue === undefined ? "" : String(ulValue);
             }
             if (hideRdaUlValuesInput) {
-                hideRdaUlValuesInput.checked = localStorage.getItem(dietHideRdaUlValuesKey) === "true";
+                const hideValue = coerceBoolean(settings[dietHideRdaUlValuesKey], undefined);
+                if (hideValue !== undefined) {
+                    hideRdaUlValuesInput.checked = hideValue;
+                }
             }
         }
+
+        let thresholdSaveTimer = null;
 
         function saveThresholds() {
             if (!rdaThresholdInput || !ulThresholdInput) {
@@ -962,28 +1005,88 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 return;
             }
-            localStorage.setItem(dietRdaThresholdKey, String(rdaValue));
-            localStorage.setItem(dietUlThresholdKey, String(ulValue));
+            const next = {
+                ...getUserSettings(),
+                [dietRdaThresholdKey]: rdaValue,
+                [dietUlThresholdKey]: ulValue,
+            };
             if (hideRdaUlValuesInput) {
-                localStorage.setItem(dietHideRdaUlValuesKey, String(hideRdaUlValuesInput.checked));
+                next[dietHideRdaUlValuesKey] = Boolean(hideRdaUlValuesInput.checked);
             }
-            if (thresholdsStatus) {
-                thresholdsStatus.textContent = "Saved.";
-            }
+            saveUserSettings(next)
+                .then(() => {
+                    if (thresholdsStatus) {
+                        thresholdsStatus.textContent = "Saved.";
+                    }
+                })
+                .catch((error) => {
+                    if (thresholdsStatus) {
+                    thresholdsStatus.textContent = `Save failed: ${error.message}`;
+                }
+            });
         }
 
-        function resetThresholds() {
-            localStorage.setItem(dietRdaThresholdKey, String(defaultRdaThreshold));
-            localStorage.setItem(dietUlThresholdKey, String(defaultUlThreshold));
-            localStorage.setItem(dietHideRdaUlValuesKey, "false");
-            setThresholdInputs();
-            if (thresholdsStatus) {
-                thresholdsStatus.textContent = "Reset to default.";
+        function scheduleThresholdSave() {
+            if (thresholdSaveTimer) {
+                clearTimeout(thresholdSaveTimer);
             }
+            thresholdSaveTimer = setTimeout(() => {
+                thresholdSaveTimer = null;
+                saveThresholds();
+            }, 600);
         }
 
         loadDietColumnsFromApi();
         setThresholdInputs();
+
+        function resetAllSettings() {
+            if (resetAllStatus) {
+                resetAllStatus.textContent = "Resetting...";
+            }
+            if (resetAllBtn) {
+                resetAllBtn.disabled = true;
+            }
+            fetch("/api/users/me/reset_settings", {
+                method: "POST",
+                credentials: "same-origin",
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Request failed with ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    userSettingsCache = normalizeSettings(data?.settings || {});
+                    setThresholdInputs();
+                    loadDietColumnsFromApi();
+                    const { stored } = applyDominantColorsFromStorage();
+                    if (foodColorProtein && stored.protein) {
+                        foodColorProtein.value = stored.protein;
+                    }
+                    if (foodColorCarb && stored.carb) {
+                        foodColorCarb.value = stored.carb;
+                    }
+                    if (foodColorFat && stored.fat) {
+                        foodColorFat.value = stored.fat;
+                    }
+                    updateSelectedCount();
+                    updateSaveEnabled();
+                    if (resetAllStatus) {
+                        resetAllStatus.textContent = "Reset to default.";
+                    }
+                })
+                .catch((error) => {
+                    if (resetAllStatus) {
+                        resetAllStatus.textContent = `Reset failed: ${error.message}`;
+                    }
+                })
+                .finally(() => {
+                    if (resetAllBtn) {
+                        resetAllBtn.disabled = false;
+                    }
+                });
+        }
 
         list.addEventListener("change", (event) => {
             if (event.target && event.target.matches("input[type='checkbox']")) {
@@ -1000,33 +1103,48 @@ document.addEventListener("DOMContentLoaded", () => {
                 return;
             }
             const normalized = normalizeDietColumns(checked);
-            localStorage.setItem(dietColumnsStorageKey, JSON.stringify(normalized));
-            originalSelection = new Set(normalized);
-            updateSaveEnabled();
-            updateSelectedCount();
-            showToast();
+            saveUserSettings({ ...getUserSettings(), [dietColumnsStorageKey]: normalized })
+                .then((settings) => {
+                    originalSelection = new Set(settings.diet_columns);
+                    updateSaveEnabled();
+                    updateSelectedCount();
+                    showToast();
+                })
+                .catch((error) => {
+                    status.textContent = `Save failed: ${error.message}`;
+                });
         });
 
-        resetBtn.addEventListener("click", () => {
-            const normalized = normalizeDietColumns(defaultDietColumns);
-            localStorage.setItem(dietColumnsStorageKey, JSON.stringify(normalized));
-            renderList(defaultDietColumns);
-            originalSelection = new Set(normalized);
-            updateSaveEnabled();
-            updateSelectedCount();
-            showToast();
+        if (rdaThresholdInput) {
+            rdaThresholdInput.addEventListener("input", () => {
+                if (thresholdsStatus) {
+                    thresholdsStatus.textContent = "Saving...";
+                }
+                scheduleThresholdSave();
+            });
+        }
+        if (ulThresholdInput) {
+            ulThresholdInput.addEventListener("input", () => {
+                if (thresholdsStatus) {
+                    thresholdsStatus.textContent = "Saving...";
+                }
+                scheduleThresholdSave();
+            });
+        }
+        if (hideRdaUlValuesInput) {
+            hideRdaUlValuesInput.addEventListener("change", () => {
+                if (thresholdsStatus) {
+                    thresholdsStatus.textContent = "Saving...";
+                }
+                scheduleThresholdSave();
+            });
+        }
+        if (resetAllBtn) {
+            resetAllBtn.addEventListener("click", () => {
+                resetAllSettings();
+            });
+        }
         });
-
-        if (thresholdsSaveBtn) {
-            thresholdsSaveBtn.addEventListener("click", () => {
-                saveThresholds();
-            });
-        }
-        if (thresholdsResetBtn) {
-            thresholdsResetBtn.addEventListener("click", () => {
-                resetThresholds();
-            });
-        }
     }
 
     initDietSettings();
@@ -1050,26 +1168,23 @@ document.addEventListener("DOMContentLoaded", () => {
     let rdaLoadPromise = null;
     let ulByNutrient = new Map();
     let ulLoadPromise = null;
-    function getStoredThreshold(key, fallback) {
-        const raw = localStorage.getItem(key);
-        if (raw === null || raw === "") {
-            return fallback;
-        }
-        const value = Number(raw);
-        return Number.isFinite(value) ? value : fallback;
+    function getStoredThreshold(key) {
+        const settings = getUserSettings();
+        return coerceNumber(settings[key], undefined);
     }
     function getStoredToggle(key, fallback = false) {
-        const raw = localStorage.getItem(key);
-        if (raw === null || raw === "") {
-            return fallback;
-        }
-        if (raw === "true") return true;
-        if (raw === "false") return false;
-        return fallback;
+        const settings = getUserSettings();
+        return coerceBoolean(settings[key], fallback);
     }
-    const rdaWarningThreshold = getStoredThreshold(dietRdaThresholdKey, defaultRdaThreshold);
-    const ulDangerThreshold = getStoredThreshold(dietUlThresholdKey, defaultUlThreshold);
-    const hideRdaUlValues = getStoredToggle(dietHideRdaUlValuesKey, false);
+    function getRdaWarningThreshold() {
+        return getStoredThreshold(dietRdaThresholdKey);
+    }
+    function getUlDangerThreshold() {
+        return getStoredThreshold(dietUlThresholdKey);
+    }
+    function getHideRdaUlValues() {
+        return getStoredToggle(dietHideRdaUlValuesKey, false);
+    }
     function loadRda() {
         if (rdaLoadPromise) {
             return rdaLoadPromise;
@@ -1974,8 +2089,11 @@ document.addEventListener("DOMContentLoaded", () => {
                                 const rdaValue = rdaByNutrient.get(String(col || "").trim());
                                 if (Number.isFinite(rdaValue) && rdaValue > 0) {
                                     const rdaPercent = Math.round((total / rdaValue) * 100);
-                                    cell.innerHTML = hideRdaUlValues ? `${rdaPercent}%` : `${rdaValue}<br>${rdaPercent}%`;
-                                    if (rdaPercent < rdaWarningThreshold) {
+                                    cell.innerHTML = getHideRdaUlValues()
+                                        ? `${rdaPercent}%`
+                                        : `${rdaValue}<br>${rdaPercent}%`;
+                                    const rdaWarning = getRdaWarningThreshold();
+                                    if (Number.isFinite(rdaWarning) && rdaPercent < rdaWarning) {
                                         cell.classList.add("text-warning");
                                         const totalCell = totalsRow.children?.[colIndex];
                                         if (totalCell) {
@@ -2014,8 +2132,11 @@ document.addEventListener("DOMContentLoaded", () => {
                                 const ulValue = ulByNutrient.get(col);
                                 if (Number.isFinite(ulValue) && ulValue > 0) {
                                     const ulPercent = Math.round((total / ulValue) * 100);
-                                    cell.innerHTML = hideRdaUlValues ? `${ulPercent}%` : `${ulValue}<br>${ulPercent}%`;
-                                    if (ulPercent > ulDangerThreshold) {
+                                    cell.innerHTML = getHideRdaUlValues()
+                                        ? `${ulPercent}%`
+                                        : `${ulValue}<br>${ulPercent}%`;
+                                    const ulDanger = getUlDangerThreshold();
+                                    if (Number.isFinite(ulDanger) && ulPercent > ulDanger) {
                                         cell.classList.add("text-danger");
                                         const totalCell = totalsRow.children?.[colIndex];
                                         if (totalCell) {
@@ -2084,7 +2205,9 @@ document.addEventListener("DOMContentLoaded", () => {
             });
     }
 
-    loadDietItems();
+    settingsReady.finally(() => {
+        loadDietItems();
+    });
 
     function rowHasChanges(row) {
         const inputs = row.querySelectorAll("input[data-column]");

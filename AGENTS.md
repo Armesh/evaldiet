@@ -29,4 +29,5 @@ This repo is a small diet/foods web app. Use this file as the single source of t
 - Always re-check the latest file state before answering questions about current contents.
 - In foods edit UI, "Vitamin K, total µg" is a generated field and must not be editable or shown.
 - SQLite must always enforce foreign keys.
+- Never change the database schema or data unless explicitly instructed.
 - Ask before making large structural changes.

@@ -4,8 +4,8 @@
 <main class="app-main">
   <div class="app-content-header">
     <div class="container-fluid">
-      <div class="row">
-        <div class="col-sm-6">
+      <div class="row mt-2">
+        <div class="col-sm-12">
           <h3 class="mb-0">Settings</h3>
         </div>
       </div>
@@ -13,6 +13,15 @@
   </div>
   <div class="app-content">
     <div class="container-fluid">
+      <div class="row">
+        <div class="col-12">
+          <button id="settings-reset-all" type="button" class="btn btn-primary btn-sm">
+            Reset All to Default
+          </button>
+          <span id="settings-reset-status" class="text-muted small ms-2"></span>
+        </div>
+      </div>
+
       <div class="row">
         <div class="col-12">
           <div class="row g-3 mt-3">
@@ -47,12 +56,6 @@
                       />
                     </div>
                     <div class="col-12 d-flex align-items-end gap-2">
-                      <button id="diet-thresholds-save" type="button" class="btn btn-primary btn-sm">
-                        Save
-                      </button>
-                      <button id="diet-thresholds-reset" type="button" class="btn btn-outline-secondary btn-sm">
-                        Reset to Default
-                      </button>
                       <span id="diet-thresholds-status" class="text-muted small"></span>
                     </div>
                     <div class="col-12">
@@ -88,11 +91,6 @@
                         </div>
                       </div>
                     </div>
-                    <div class="col-12">
-                      <button type="button" class="btn btn-outline-secondary btn-sm" id="food-color-reset">
-                        Reset to defaults
-                      </button>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -114,9 +112,6 @@
               <div class="d-flex align-items-center gap-2 mt-3">
                 <button id="diet-columns-save" type="button" class="btn btn-primary btn-sm">
                   Save
-                </button>
-                <button id="diet-columns-reset" type="button" class="btn btn-outline-secondary btn-sm">
-                  Reset to Default
                 </button>
                 <span id="diet-columns-status" class="text-muted small"></span>
               </div>
