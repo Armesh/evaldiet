@@ -7,6 +7,7 @@ import sqlite3
 import base64
 import hashlib
 import hmac
+import time
 
 import httpx
 from dotenv import load_dotenv
@@ -121,7 +122,7 @@ def root(request: Request, user: dict = Depends(verify_auth_token_get_user)):
 
     if diet_name:
         return RedirectResponse(url=f"/ui/diets?diet_name={diet_name}")
-    return RedirectResponse(url="/ui/diets")
+    return RedirectResponse(url="/ui/foods")
 
 @app.get("/ui/login")
 def login_page(request: Request):
@@ -137,16 +138,39 @@ def register_page(request: Request):
         verify_auth_token_get_user(request)
         return RedirectResponse(url="/")
     except HTTPException:
-        return templates.TemplateResponse("register.html", {"request": request})
+        captcha_code = random_alphanumeric(6)
+        response = templates.TemplateResponse(
+            "register.html",
+            {"request": request, "reg_captcha_code": captcha_code},
+        )
+        response.set_cookie(
+            key="reg_code",
+            value=captcha_code,
+            httponly=False,
+            secure=False,
+            samesite="lax",
+            path="/",
+            max_age=600,
+        )
+        return response
 
 @app.get("/hashpassword/{password}")
 def test_hash(password: str):
     return {"hash": hash_password(password)}
 
 @app.post("/api/register")
-def register_submit(request: Request, username: str = Form(...), password: str = Form(...)):
+def register_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    captcha_code: str = Form(...),
+    captcha_check: str | None = Form(None),
+):
     conn = None
     try:
+        reg_code = request.cookies.get("reg_code")
+        if not reg_code or captcha_check is None or captcha_code.strip() != reg_code:
+            raise HTTPException(status_code=400, detail="Captcha check failed")
         conn = sqlite3.connect(get_db_path())
         cur = conn.cursor()
         cur.execute("SELECT 1 FROM users WHERE username = ? LIMIT 1", (username,))
@@ -158,6 +182,26 @@ def register_submit(request: Request, username: str = Form(...), password: str =
             "INSERT INTO users (username, hashed_password, created_at) VALUES (?, ?, datetime('now'))",
             (username, hashed_password),
         )
+        user_id = cur.lastrowid
+
+        init_foods_path = os.path.join("app", "init_foods_data.sql")
+        if os.path.exists(init_foods_path):
+            with open(init_foods_path, "r", encoding="utf-8") as handle:
+                sql_blob = handle.read()
+            statements = [stmt.strip() for stmt in sql_blob.split(";") if stmt.strip()]
+            for stmt in statements:
+                stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
+                cur.execute(stmt)
+
+        init_diets_path = os.path.join("app", "init_diets_data.sql")
+        if os.path.exists(init_diets_path):
+            with open(init_diets_path, "r", encoding="utf-8") as handle:
+                sql_blob = handle.read()
+            statements = [stmt.strip() for stmt in sql_blob.split(";") if stmt.strip()]
+            for stmt in statements:
+                stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
+                cur.execute(stmt)
+
         conn.commit()
     except HTTPException:
         raise
@@ -186,6 +230,7 @@ def register_submit(request: Request, username: str = Form(...), password: str =
         path="/",
         max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),
     )
+    response.delete_cookie(key="reg_code", path="/")
     return response
 
 @app.post("/api/login")

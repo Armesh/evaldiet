@@ -32,6 +32,25 @@
                 required
               />
             </div>
+            <div class="mb-3">
+              <label class="form-label">Captcha</label>
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="badge text-bg-secondary" id="register-captcha-code">{{ reg_captcha_code }}</span>
+                <span class="small text-muted">Type the code and check the box.</span>
+              </div>
+              <input
+                type="text"
+                class="form-control mb-2"
+                id="captcha-code"
+                name="captcha_code"
+                autocomplete="off"
+                required
+              />
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="captcha-check" name="captcha_check" required />
+                <label class="form-check-label" for="captcha-check">I am not a bot</label>
+              </div>
+            </div>
             <button type="submit" class="btn btn-primary w-100">Create account</button>
           </form>
         </div>
