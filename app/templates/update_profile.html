@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main class="app-main">
+  <div class="app-content-header">
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-6">
+          <h3 class="mb-0">Update Profile</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="app-content">
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-12 col-lg-6">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="mb-3">Account</h5>
+              <p class="text-muted small mb-3">
+                Update your username or password. Leave the password fields blank to keep your current password.
+              </p>
+              <form id="update-profile-form" data-user-id="{{ user.id }}">
+                <div class="mb-3">
+                  <label class="form-label" for="update-username">Username</label>
+                  <input
+                    id="update-username"
+                    name="username"
+                    type="text"
+                    class="form-control"
+                    autocomplete="username"
+                    required
+                    value="{{ user.username }}"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label class="form-label" for="update-password">New Password</label>
+                  <input
+                    id="update-password"
+                    name="password"
+                    type="password"
+                    class="form-control"
+                    autocomplete="new-password"
+                  />
+                </div>
+                <div class="mb-3">
+                  <label class="form-label" for="update-password-confirm">Confirm New Password</label>
+                  <input
+                    id="update-password-confirm"
+                    type="password"
+                    class="form-control"
+                    autocomplete="new-password"
+                  />
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                  <button type="submit" class="btn btn-primary">Save</button>
+                  <span id="update-profile-status" class="text-muted small"></span>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="diet-columns-toast" class="diet-auto-save-toast" role="status" aria-live="polite">
+    <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+    <span>Updated</span>
+  </div>
+</main>
+<script>
+  (() => {
+    const form = document.getElementById("update-profile-form");
+    const status = document.getElementById("update-profile-status");
+    const usernameInput = document.getElementById("update-username");
+    const passwordInput = document.getElementById("update-password");
+    const confirmInput = document.getElementById("update-password-confirm");
+
+    if (!form || !status || !usernameInput || !passwordInput || !confirmInput) {
+      return;
+    }
+
+    const originalUsername = (usernameInput.value || "").trim();
+
+    function setStatus(message, isError) {
+      status.textContent = message;
+      status.classList.toggle("text-danger", Boolean(isError));
+      status.classList.toggle("text-muted", !isError);
+    }
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const userId = form.dataset.userId;
+      const username = (usernameInput.value || "").trim();
+      const password = passwordInput.value || "";
+      const confirm = confirmInput.value || "";
+
+      if (!username) {
+        setStatus("Username is required.", true);
+        return;
+      }
+      if (password || confirm) {
+        if (password !== confirm) {
+          setStatus("Passwords do not match.", true);
+          return;
+        }
+      }
+
+      const payload = {};
+      if (username !== originalUsername) {
+        payload.username = username;
+      }
+      if (password) {
+        payload.password = password;
+      }
+
+      if (Object.keys(payload).length === 0) {
+        setStatus("No changes to save.", true);
+        return;
+      }
+
+      setStatus("Saving...");
+      fetch(`/api/users/${encodeURIComponent(userId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload),
+      })
+        .then((response) => {
+          if (!response.ok) {
+            return response.json().then((data) => {
+              const detail = data?.detail || "Update failed.";
+              throw new Error(detail);
+            });
+          }
+          return response.json();
+        })
+        .then(() => {
+          setStatus("Profile updated.");
+          passwordInput.value = "";
+          confirmInput.value = "";
+        })
+        .catch((error) => {
+          setStatus(error.message || "Update failed.", true);
+        });
+    });
+  })();
+</script>
+{% endblock %}

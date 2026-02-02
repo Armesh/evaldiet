@@ -9,8 +9,8 @@
               </a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" data-lte-toggle="sidebar" href="#" role="button">
-                <span id="nav-current-user" class="nav-link py-0 text-muted small"></span>
+              <a href="/ui/update_profile" class="nav-link" id="nav-current-user">
+                <p>-</p>
               </a>
             </li>
           </ul>
@@ -30,13 +30,31 @@
       </nav>
       <script>
         (function () {
+          function decodeCookieValue(value) {
+            if (!value) return "";
+            let v = value;
+            if (v.startsWith("\"") && v.endsWith("\"")) {
+              v = v.slice(1, -1);
+              v = v.replace(/\\054/g, ",").replace(/\\"/g, "\"").replace(/\\\\/g, "\\");
+            }
+            return v;
+          }
+
           const el = document.getElementById("nav-current-user");
           if (!el) return;
+          const label = el.querySelector("p");
+          if (!label) return;
           const match = document.cookie.split("; ").find((row) => row.startsWith("curr_user="));
           if (!match) return;
-          const value = decodeURIComponent(match.split("=")[1] || "");
-          if (value) {
-            el.textContent = value;
+          const raw = decodeCookieValue(decodeURIComponent(match.split("=")[1] || ""));
+          if (!raw) return;
+          try {
+            const user = JSON.parse(raw);
+            if (user && user.username) {
+              label.textContent = user.username;
+            }
+          } catch {
+            label.textContent = raw;
           }
         })();
       </script>

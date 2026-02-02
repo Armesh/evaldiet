@@ -8,6 +8,7 @@ import base64
 import hashlib
 import hmac
 import time
+import json
 
 import httpx
 from dotenv import load_dotenv
@@ -71,6 +72,16 @@ def strip_user_id(data):
     if isinstance(data, list):
         return [strip_user_id(item) for item in data]
     return data
+
+def user_cookie_payload(user_row) -> str:
+    if user_row is None:
+        return ""
+    if isinstance(user_row, sqlite3.Row):
+        data = dict(user_row)
+    else:
+        data = dict(user_row)
+    data.pop("hashed_password", None)
+    return json.dumps(data, separators=(",", ":"))
 
 def verify_auth_token_get_user(request: Request) -> dict:
     auth_token = request.cookies.get("auth_token")
@@ -203,6 +214,8 @@ def register_submit(
                 cur.execute(stmt)
 
         conn.commit()
+        cur.execute("SELECT * FROM users WHERE id = ? LIMIT 1", (user_id,))
+        created_user = cur.fetchone()
     except HTTPException:
         raise
     except Exception as exc:
@@ -223,7 +236,7 @@ def register_submit(
     )
     response.set_cookie(
         key="curr_user",
-        value=username,
+        value=user_cookie_payload(created_user or {"id": user_id, "username": username}),
         httponly=False,
         secure=False,
         samesite="lax",
@@ -272,7 +285,7 @@ def login_submit(request: Request, username: str = Form(...), password: str = Fo
     # --- SET USER HERE ---
     response.set_cookie(
         key="curr_user",
-        value=username,
+        value=user_cookie_payload(user),
         httponly=False,        # JS can read
         secure=False,         # True in prod (HTTPS)
         samesite="lax",       # Same-domain
@@ -304,11 +317,102 @@ def edit_food(request: Request, fdc_id: int, user: dict = Depends(verify_auth_to
 def settings_page(request: Request, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("settings.html", {"request": request})
 
+@app.get("/ui/update_profile")
+def update_profile_page(request: Request, user: dict = Depends(verify_auth_token_get_user)):
+    return templates.TemplateResponse("update_profile.html", {"request": request, "user": user})
 
 
 
 
 
+
+
+@app.put("/api/users/{user_id}")
+def update_user(user_id: int, payload: dict = Body(...), user: dict = Depends(verify_auth_token_get_user)):
+    if user_id != user.get("id"):
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    username = payload.get("username") if isinstance(payload, dict) else None
+    password = payload.get("password") if isinstance(payload, dict) else None
+
+    updates = {}
+    new_hashed_password = None
+
+    if username is not None:
+        username = str(username).strip()
+        if not username:
+            raise HTTPException(status_code=400, detail="Username is required")
+        updates["username"] = username
+
+    if password is not None:
+        password = str(password)
+        if not password:
+            raise HTTPException(status_code=400, detail="Password is required")
+        new_hashed_password = hash_password(password)
+        updates["hashed_password"] = new_hashed_password
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    conn = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        cur = conn.cursor()
+        if "username" in updates:
+            cur.execute("SELECT 1 FROM users WHERE username = ? AND id != ? LIMIT 1", (username, user_id))
+            if cur.fetchone() is not None:
+                raise HTTPException(status_code=400, detail="Username already exists")
+
+        set_clause = ", ".join([f"\"{col}\" = ?" for col in updates.keys()])
+        values = list(updates.values()) + [user_id]
+        cur.execute(f"UPDATE users SET {set_clause} WHERE id = ?", values)
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+
+    updated_user = None
+    try:
+        conn = sqlite3.connect(get_db_path())
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM users WHERE id = ? LIMIT 1", (user_id,))
+        updated_user = cur.fetchone()
+    except Exception:
+        updated_user = None
+    finally:
+        if conn is not None:
+            conn.close()
+
+    response = JSONResponse({"updated": True}, status_code=200)
+    max_age = int(os.environ.get("AuthCookieExpireSecs", 3600))
+    if new_hashed_password:
+        response.set_cookie(
+            key="auth_token",
+            value=new_hashed_password,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            path="/",
+            max_age=max_age,
+        )
+    if "username" in updates:
+        response.set_cookie(
+            key="curr_user",
+            value=user_cookie_payload(updated_user or {"id": user_id, "username": username}),
+            httponly=False,
+            secure=False,
+            samesite="lax",
+            path="/",
+            max_age=max_age,
+        )
+    return response
 
 @app.get("/api/foods")
 @app.get("/api/foods/{fdc_id}")
