@@ -365,6 +365,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const columns = Object.keys(foods[0] || {});
         const headRow = document.createElement("tr");
+        const actionTh = document.createElement("th");
+        actionTh.textContent = "Action";
+        actionTh.setAttribute("data-searchable", "false");
+        headRow.appendChild(actionTh);
         columns.forEach((col) => {
             const th = document.createElement("th");
             th.textContent = col;
@@ -373,15 +377,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             headRow.appendChild(th);
         });
-        const editTh = document.createElement("th");
-        editTh.textContent = "Edit";
-        editTh.setAttribute("data-searchable", "false");
-        headRow.appendChild(editTh);
-
-        const deleteTh = document.createElement("th");
-        deleteTh.textContent = "Delete";
-        deleteTh.setAttribute("data-searchable", "false");
-        headRow.appendChild(deleteTh);
         foodsTableHead.innerHTML = "";
         foodsTableHead.appendChild(headRow);
 
@@ -393,13 +388,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 row.classList.add(`food-dominant-${dominant}`);
             }
 
-            columns.forEach((col) => {
-                const cell = document.createElement("td");
-                cell.textContent = food?.[col] ?? "";
-                row.appendChild(cell);
-            });
-
-            const editCell = document.createElement("td");
+            const actionCell = document.createElement("td");
             const editLink = document.createElement("a");
             editLink.className = "btn btn-sm btn-outline-primary me-2";
             editLink.textContent = "Edit";
@@ -409,18 +398,21 @@ document.addEventListener("DOMContentLoaded", () => {
                 editLink.href = "#";
                 editLink.classList.add("disabled");
             }
-            editCell.appendChild(editLink);
-            row.appendChild(editCell);
-
-            const deleteCell = document.createElement("td");
             const deleteBtn = document.createElement("button");
             deleteBtn.type = "button";
             deleteBtn.className = "btn btn-outline-danger btn-sm";
             deleteBtn.textContent = "Delete";
             deleteBtn.dataset.fdcId = food?.fdc_id ?? "";
             deleteBtn.dataset.foodName = food?.Name ?? "";
-            deleteCell.appendChild(deleteBtn);
-            row.appendChild(deleteCell);
+            actionCell.appendChild(editLink);
+            actionCell.appendChild(deleteBtn);
+            row.appendChild(actionCell);
+
+            columns.forEach((col) => {
+                const cell = document.createElement("td");
+                cell.textContent = food?.[col] ?? "";
+                row.appendChild(cell);
+            });
 
             fragment.appendChild(row);
         });
