@@ -27,3 +27,7 @@
 .diet-auto-save-toast .bi {
   color: #3cc45a;
 }
+
+.sidebar-expand-lg.layout-fixed .app-main {
+  overflow: visible !important;
+}
