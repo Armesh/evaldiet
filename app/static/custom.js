@@ -1729,6 +1729,15 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (col === "Name") {
                         th.classList.add("name-col");
                     }
+                    if (col === "quantity") {
+                        th.classList.add("quantity-col");
+                    }
+                    if (col === "Unit") {
+                        th.classList.add("unit-col");
+                    }
+                    if (col === "Price") {
+                        th.classList.add("price-col");
+                    }
                     if (col === "color") {
                         th.classList.add("color-col");
                     }
@@ -1773,6 +1782,15 @@ document.addEventListener("DOMContentLoaded", () => {
                         const value = item[col];
                         if (col === "diet_name" || col === "fdc_id" || col === "sort_order" || col === "Energy kJ") {
                             cell.classList.add("is-hidden-col");
+                        }
+                        if (col === "quantity") {
+                            cell.classList.add("quantity-col");
+                        }
+                        if (col === "Unit") {
+                            cell.classList.add("unit-col");
+                        }
+                        if (col === "Price") {
+                            cell.classList.add("price-col");
                         }
                         if (col === "color") {
                             cell.classList.add("color-col");
