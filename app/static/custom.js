@@ -1728,9 +1728,11 @@ document.addEventListener("DOMContentLoaded", () => {
                     th.textContent = col === "delete_action" ? "" : col;
                     if (col === "Name") {
                         th.classList.add("name-col");
+                        th.style.backgroundColor = "var(--bs-body-bg)";
                     }
                     if (col === "quantity") {
                         th.classList.add("quantity-col");
+                        th.style.backgroundColor = "var(--bs-body-bg)";
                     }
                     if (col === "Unit") {
                         th.classList.add("unit-col");
@@ -1785,6 +1787,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                         if (col === "quantity") {
                             cell.classList.add("quantity-col");
+                        }
+                        if ((col === "Name" || col === "quantity") && item.color) {
+                            cell.style.backgroundColor = toRgba(item.color, 1);
                         }
                         if (col === "Unit") {
                             cell.classList.add("unit-col");
@@ -1858,6 +1863,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                             fdcDisplay.textContent = String(selectedFood.fdc_id);
                                         }
                                         options.style.display = "none";
+                                        cell.classList.remove("is-open");
                                         updateSaveAllState();
                                         updateDietHashDisplay();
                                         scheduleAutoSave();
@@ -1865,7 +1871,13 @@ document.addEventListener("DOMContentLoaded", () => {
                                     options.appendChild(option);
                                 });
 
-                                options.style.display = top.length > 0 ? "block" : "none";
+                                if (top.length > 0) {
+                                    options.style.display = "block";
+                                    cell.classList.add("is-open");
+                                } else {
+                                    options.style.display = "none";
+                                    cell.classList.remove("is-open");
+                                }
                             }
 
                             input.addEventListener("input", () => {
@@ -1877,6 +1889,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             input.addEventListener("blur", () => {
                                 setTimeout(() => {
                                     options.style.display = "none";
+                                    cell.classList.remove("is-open");
                                 }, 150);
                             });
 

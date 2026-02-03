@@ -52,11 +52,7 @@
           #diet-items-body .food-option:hover {
             background: var(--bs-secondary-bg);
           }
-          #diet-items-head .name-col,
-          #diet-items-body .name-col {
-            min-width: 260px;
-            width: 30%;
-          }
+
           #diet-items-body .food-options {
             min-width: 260px;
           }
@@ -69,7 +65,7 @@
             position: absolute;
             top: calc(100% + 0.25rem);
             left: 0;
-            z-index: 20;
+            z-index: 10;
             display: none;
             grid-template-columns: repeat(3, 18px);
             gap: 0.35rem;
@@ -103,11 +99,10 @@
           }
 
           .table-responsive {
-            overflow-x: visible !important;
+            overflow: visible !important;
           }
-
-          .diet-items-table {
-            background-color: var(--bs-body-bg);
+          .card-body {
+            overflow: visible !important;
           }
 
           .diet-items-table .delete-col {
@@ -170,6 +165,38 @@
           }
           .diet-name-editor .diet-name-display {
             cursor: pointer;
+          }
+
+          /* .card-body { overflow-x: auto; } */
+
+          .diet-items-table {
+            background-color: var(--bs-body-bg);
+            table-layout: fixed;
+            min-width: 2800px;
+          }
+
+          .diet-items-table tbody tr {
+            background-color: var(--bs-body-bg);
+          } 
+
+          .diet-items-table th.name-col, .diet-items-table td.name-col {
+            width: 200px;
+            min-width: 200px;
+            position: sticky;
+            left: 0;
+            z-index: 2;
+          }
+
+          .diet-items-table th.quantity-col, .diet-items-table td.quantity-col {
+            width: 120px;
+            min-width: 120px;
+            position: sticky;
+            left: 200px;
+            z-index: 1;
+          }
+
+          .diet-items-table td.name-col.is-open {
+            z-index: 20;
           }
         </style>
         <!--begin::App Content Header-->
