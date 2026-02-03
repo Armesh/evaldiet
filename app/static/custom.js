@@ -1728,11 +1728,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     th.textContent = col === "delete_action" ? "" : col;
                     if (col === "Name") {
                         th.classList.add("name-col");
-                        th.style.backgroundColor = "var(--bs-body-bg)";
                     }
                     if (col === "quantity") {
                         th.classList.add("quantity-col");
-                        th.style.backgroundColor = "var(--bs-body-bg)";
                     }
                     if (col === "Unit") {
                         th.classList.add("unit-col");

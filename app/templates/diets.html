@@ -135,17 +135,6 @@
             background-color: var(--food-dominant-fat);
             font-weight: 600;
           }
-          .diet-items-table > :not(caption) > * > * {
-            border-color: rgba(230, 230, 230, 0.1);
-            border-left: 1px solid rgba(230, 230, 230, 0.1);
-          }
-          #diet-items-head tr > th {
-            border-top: 1px solid rgba(230, 230, 230, 0.1);
-          }
-
-          .diet-items-table > :not(caption) > * > *:first-child {
-            border-left: 0;
-          }
 
           .diet-name-editor {
             display: inline-flex;
@@ -170,14 +159,13 @@
           /* .card-body { overflow-x: auto; } */
 
           .diet-items-table {
-            background-color: var(--bs-body-bg);
             table-layout: fixed;
             min-width: 2800px;
           }
 
-          .diet-items-table tbody tr {
-            background-color: var(--bs-body-bg);
-          } 
+          .diet-items-table #diet-items-body tr {
+            background-color: var(--bs-body-bg)
+          }
 
           .diet-items-table th.name-col, .diet-items-table td.name-col {
             width: 200px;
@@ -250,7 +238,7 @@
                       </button>
                     </div>
                     <div class="table-responsive">
-                      <table class="table align-middle mb-0 diet-items-table">
+                      <table class="table table-sm table-bordered align-middle mb-0 diet-items-table">
                         <thead id="diet-items-head"></thead>
                         <tbody id="diet-items-body"></tbody>
                       </table>
