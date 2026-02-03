@@ -2052,8 +2052,12 @@ document.addEventListener("DOMContentLoaded", () => {
                             cell.classList.add("color-col");
                             cell.textContent = "";
                         } else if (col === "Name") {
+                            cell.classList.add("name-col");
                             cell.textContent = "Totals";
                         } else if (col === "quantity" || col === "Unit") {
+                            if (col === "quantity") {
+                                cell.classList.add("quantity-col");
+                            }
                             cell.textContent = "";
                         } else {
                             const total = getColumnTotal(col);
@@ -2102,8 +2106,12 @@ document.addEventListener("DOMContentLoaded", () => {
                                 cell.classList.add("color-col");
                                 cell.textContent = "";
                             } else if (col === "Name") {
+                                cell.classList.add("name-col");
                                 cell.textContent = "RDA %";
                             } else if (col === "quantity" || col === "Unit") {
+                                if (col === "quantity") {
+                                    cell.classList.add("quantity-col");
+                                }
                                 cell.textContent = "";
                             } else {
                                 const total = getColumnTotal(col);
@@ -2145,8 +2153,12 @@ document.addEventListener("DOMContentLoaded", () => {
                                 cell.classList.add("color-col");
                                 cell.textContent = "";
                             } else if (col === "Name") {
+                                cell.classList.add("name-col");
                                 cell.textContent = "Upper Limit (UL) %";
                             } else if (col === "quantity" || col === "Unit") {
+                                if (col === "quantity") {
+                                    cell.classList.add("quantity-col");
+                                }
                                 cell.textContent = "";
                             } else {
                                 const total = getColumnTotal(col);

@@ -35,11 +35,6 @@
                     background-color: var(--food-dominant-fat);
                   }
 
-                  .datatable-container {
-                    max-height: 800px;   /* important */
-                    overflow-y: auto;
-                  }
-
                   #foods-table thead th {
                     position: sticky;
                     top: 0;
@@ -53,7 +48,7 @@
                     <form id="foods-fdc-form" class="row gy-2 gx-3 align-items-end">
                       <div class="col-sm-12 col-lg-6">
                         <label class="form-label text-decoration-underline" for="foods-fdc-id">Add food by FDC ID</label>
-                        <p>Gets foods from <a target="_blank" href="https://fdc.nal.usda.gov/food-search?type=Foundation&query=chicken">fdc.nal.usda.gov</a>. Search for any food, e.g chicken in this example, then click on a result, you will see the FDC ID for the food in the details. Input the FDC ID below then click <button class="btn btn-primary w-100" type="submit">Fetch & Add Food by FDC ID</button></p>
+                        <p>Search any food, e.g chicken in this <a target="_blank" href="https://fdc.nal.usda.gov/food-search?type=Foundation&query=chicken">fdc.nal.usda.gov</a> example, then click on a result, you will see the FDC ID for the food in details. Input the FDC ID below then click <button class="btn btn-primary w-100" type="submit">Fetch & Add Food by FDC ID</button></p>
                         
                         <img src="{{ url_for('static', path='fdcid.JPG') }}" class="img-fluid mt-2 mb-3" style="max-width: 420px;" />
                         
