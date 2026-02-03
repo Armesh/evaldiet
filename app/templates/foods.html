@@ -23,9 +23,6 @@
             <div class="row">
               <div class="col-12">
                 <style>
-                  .table > :not(caption) > * > * {
-                    background-color: inherit !important;
-                  }
                   #foods-table tbody tr.food-dominant-protein {
                     background-color: var(--food-dominant-protein);
                   }
@@ -36,6 +33,18 @@
 
                   #foods-table tbody tr.food-dominant-fat {
                     background-color: var(--food-dominant-fat);
+                  }
+
+                  .datatable-container {
+                    max-height: 800px;   /* important */
+                    overflow-y: auto;
+                  }
+
+                  #foods-table thead th {
+                    position: sticky;
+                    top: 0;
+                    background: var(--bs-secondary-bg);  /* or your theme bg */
+                    z-index: 2;
                   }
                 </style>
 
@@ -57,12 +66,10 @@
                 <div class="card">
                   <div class="card-body">
                     <div id="foods-status" class="mb-2 text-muted">Loading foods...</div>
-                    <div class="table-responsive">
                       <table id="foods-table" class="table table-bordered table-hover align-middle">
                         <thead id="foods-table-head"></thead>
                         <tbody id="foods-table-body"></tbody>
                       </table>
-                    </div>
                   </div>
                 </div>
               </div>

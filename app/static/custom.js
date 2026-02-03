@@ -428,8 +428,8 @@ document.addEventListener("DOMContentLoaded", () => {
         if (tableEl) {
             tableEl._datatable = new simpleDatatables.DataTable(tableEl, {
                 searchable: true,
-                fixedHeight: true,
-                perPage: 10000,
+                fixedHeight: false,
+                paging: false,
             });
         }
         return tableEl?._datatable;
