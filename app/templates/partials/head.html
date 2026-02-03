@@ -142,7 +142,7 @@
   </script>
   
   <script src="{{ url_for('static', path='custom.js') }}?v={{ rand_id() }}"></script>
-  <link rel="stylesheet" href="{{ url_for('static', path='custom.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', path='custom.css') }}?v={{ rand_id() }}" />
   <style>
   .datatable-table {
     border-collapse: collapse;
