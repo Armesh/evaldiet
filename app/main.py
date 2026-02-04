@@ -283,6 +283,10 @@ def all_foods(request: Request, user: dict = Depends(verify_auth_token_get_user)
 def edit_food(request: Request, fdc_id: int, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("foods_edit.html", {"request": request, "fdc_id": fdc_id})
 
+@app.get("/ui/tutorial")
+def tutorial_page(request: Request, user: dict = Depends(verify_auth_token_get_user)):
+    return templates.TemplateResponse("tutorial.html", {"request": request})
+
 @app.get("/ui/settings")
 def settings_page(request: Request, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("settings.html", {"request": request})
