@@ -204,6 +204,24 @@ def register_submit(
                 stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
                 cur.execute(stmt)
 
+        init_rdas_path = os.path.join("app", "init_rdas_data.sql")
+        if os.path.exists(init_rdas_path):
+            with open(init_rdas_path, "r", encoding="utf-8") as handle:
+                sql_blob = handle.read()
+            statements = [stmt.strip() for stmt in sql_blob.split(";") if stmt.strip()]
+            for stmt in statements:
+                stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
+                cur.execute(stmt)
+
+        init_ul_path = os.path.join("app", "init_ul_data.sql")
+        if os.path.exists(init_ul_path):
+            with open(init_ul_path, "r", encoding="utf-8") as handle:
+                sql_blob = handle.read()
+            statements = [stmt.strip() for stmt in sql_blob.split(";") if stmt.strip()]
+            for stmt in statements:
+                stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
+                cur.execute(stmt)
+
         conn.commit()
         cur.execute("SELECT * FROM users WHERE id = ? LIMIT 1", (user_id,))
         created_user = cur.fetchone()
@@ -686,9 +704,9 @@ def get_rda(user: dict = Depends(verify_auth_token_get_user)):
         conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT * FROM RDA")
+        cur.execute("SELECT * FROM RDA WHERE user_id = ?", (user["id"],))
         rows = cur.fetchall()
-        return [dict(row) for row in rows]
+        return strip_user_id([dict(row) for row in rows])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
@@ -702,9 +720,9 @@ def get_ul(user: dict = Depends(verify_auth_token_get_user)):
         conn = get_db_conn()
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
-        cur.execute("SELECT * FROM UL")
+        cur.execute("SELECT * FROM UL WHERE user_id = ?", (user["id"],))
         rows = cur.fetchall()
-        return [dict(row) for row in rows]
+        return strip_user_id([dict(row) for row in rows])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
