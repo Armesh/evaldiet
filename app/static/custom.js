@@ -836,10 +836,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const toast = document.getElementById("diet-columns-toast");
         const resetAllBtn = document.getElementById("settings-reset-all");
         const resetAllStatus = document.getElementById("settings-reset-status");
-        const rdaThresholdInput = document.getElementById("diet-rda-threshold");
-        const ulThresholdInput = document.getElementById("diet-ul-threshold");
-        const hideRdaUlValuesInput = document.getElementById("diet-hide-rda-ul-values");
-        const thresholdsStatus = document.getElementById("diet-thresholds-status");
         if (!list || !saveBtn) {
             return;
         }
@@ -965,71 +961,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 });
         }
 
-        function setThresholdInputs() {
-            const settings = getUserSettings();
-            if (rdaThresholdInput) {
-                const rdaValue = coerceNumber(settings[dietRdaThresholdKey], undefined);
-                rdaThresholdInput.value = rdaValue === undefined ? "" : String(rdaValue);
-            }
-            if (ulThresholdInput) {
-                const ulValue = coerceNumber(settings[dietUlThresholdKey], undefined);
-                ulThresholdInput.value = ulValue === undefined ? "" : String(ulValue);
-            }
-            if (hideRdaUlValuesInput) {
-                const hideValue = coerceBoolean(settings[dietHideRdaUlValuesKey], undefined);
-                if (hideValue !== undefined) {
-                    hideRdaUlValuesInput.checked = hideValue;
-                }
-            }
-        }
-
-        let thresholdSaveTimer = null;
-
-        function saveThresholds() {
-            if (!rdaThresholdInput || !ulThresholdInput) {
-                return;
-            }
-            const rdaValue = Number(rdaThresholdInput.value);
-            const ulValue = Number(ulThresholdInput.value);
-            if (!Number.isFinite(rdaValue) || !Number.isFinite(ulValue)) {
-                if (thresholdsStatus) {
-                    thresholdsStatus.textContent = "Enter valid numbers.";
-                }
-                return;
-            }
-            const next = {
-                ...getUserSettings(),
-                [dietRdaThresholdKey]: rdaValue,
-                [dietUlThresholdKey]: ulValue,
-            };
-            if (hideRdaUlValuesInput) {
-                next[dietHideRdaUlValuesKey] = Boolean(hideRdaUlValuesInput.checked);
-            }
-            saveUserSettings(next)
-                .then(() => {
-                    if (thresholdsStatus) {
-                        thresholdsStatus.textContent = "Saved.";
-                    }
-                })
-                .catch((error) => {
-                    if (thresholdsStatus) {
-                    thresholdsStatus.textContent = `Save failed: ${error.message}`;
-                }
-            });
-        }
-
-        function scheduleThresholdSave() {
-            if (thresholdSaveTimer) {
-                clearTimeout(thresholdSaveTimer);
-            }
-            thresholdSaveTimer = setTimeout(() => {
-                thresholdSaveTimer = null;
-                saveThresholds();
-            }, 600);
-        }
-
         loadDietColumnsFromApi();
-        setThresholdInputs();
 
         function resetAllSettings() {
             if (resetAllStatus) {
@@ -1050,7 +982,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 })
                 .then((data) => {
                     userSettingsCache = normalizeSettings(data?.settings || {});
-                    setThresholdInputs();
                     loadDietColumnsFromApi();
                     const { stored } = applyDominantColorsFromStorage();
                     if (foodColorProtein && stored.protein) {
@@ -1139,7 +1070,177 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    function initDietThresholds() {
+        const rdaThresholdInput = document.getElementById("diet-rda-threshold");
+        const ulThresholdInput = document.getElementById("diet-ul-threshold");
+        const hideRdaUlValuesInput = document.getElementById("diet-hide-rda-ul-values");
+        const thresholdsStatus = document.getElementById("diet-thresholds-status");
+        if (!rdaThresholdInput || !ulThresholdInput) {
+            return;
+        }
+        return loadUserSettings().then(() => {
+            function setThresholdInputs() {
+                const settings = getUserSettings();
+                const rdaValue = coerceNumber(settings[dietRdaThresholdKey], undefined);
+                rdaThresholdInput.value = rdaValue === undefined ? "" : String(rdaValue);
+                const ulValue = coerceNumber(settings[dietUlThresholdKey], undefined);
+                ulThresholdInput.value = ulValue === undefined ? "" : String(ulValue);
+                if (hideRdaUlValuesInput) {
+                    const hideValue = coerceBoolean(settings[dietHideRdaUlValuesKey], undefined);
+                    if (hideValue !== undefined) {
+                        hideRdaUlValuesInput.checked = hideValue;
+                    }
+                }
+            }
+
+            let thresholdSaveTimer = null;
+
+            function saveThresholds() {
+                const rdaValue = Number(rdaThresholdInput.value);
+                const ulValue = Number(ulThresholdInput.value);
+                if (!Number.isFinite(rdaValue) || !Number.isFinite(ulValue)) {
+                    if (thresholdsStatus) {
+                        thresholdsStatus.textContent = "Enter valid numbers.";
+                    }
+                    return;
+                }
+                const next = {
+                    ...getUserSettings(),
+                    [dietRdaThresholdKey]: rdaValue,
+                    [dietUlThresholdKey]: ulValue,
+                };
+                if (hideRdaUlValuesInput) {
+                    next[dietHideRdaUlValuesKey] = Boolean(hideRdaUlValuesInput.checked);
+                }
+                saveUserSettings(next)
+                    .then(() => {
+                        if (thresholdsStatus) {
+                            thresholdsStatus.textContent = "Saved.";
+                        }
+                    })
+                    .catch((error) => {
+                        if (thresholdsStatus) {
+                            thresholdsStatus.textContent = `Save failed: ${error.message}`;
+                        }
+                    });
+            }
+
+            function scheduleThresholdSave() {
+                if (thresholdSaveTimer) {
+                    clearTimeout(thresholdSaveTimer);
+                }
+                thresholdSaveTimer = setTimeout(() => {
+                    thresholdSaveTimer = null;
+                    saveThresholds();
+                }, 600);
+            }
+
+            setThresholdInputs();
+
+            rdaThresholdInput.addEventListener("input", () => {
+                if (thresholdsStatus) {
+                    thresholdsStatus.textContent = "Saving...";
+                }
+                scheduleThresholdSave();
+            });
+            ulThresholdInput.addEventListener("input", () => {
+                if (thresholdsStatus) {
+                    thresholdsStatus.textContent = "Saving...";
+                }
+                scheduleThresholdSave();
+            });
+            if (hideRdaUlValuesInput) {
+                hideRdaUlValuesInput.addEventListener("change", () => {
+                    if (thresholdsStatus) {
+                        thresholdsStatus.textContent = "Saving...";
+                    }
+                    scheduleThresholdSave();
+                });
+            }
+        });
+    }
+
     initDietSettings();
+    initDietThresholds();
+
+    const rdaTable = document.getElementById("rda-table");
+    const rdaStatus = document.getElementById("rda-status");
+    const ulTable = document.getElementById("ul-table");
+    const ulStatus = document.getElementById("ul-status");
+
+    function renderNutrientTable(tableEl, rows) {
+        if (!tableEl) {
+            return;
+        }
+        const headRow = document.createElement("tr");
+        ["Nutrient", "Value"].forEach((label) => {
+            const th = document.createElement("th");
+            th.textContent = label;
+            headRow.appendChild(th);
+        });
+        const thead = document.createElement("thead");
+        thead.appendChild(headRow);
+
+        const tbody = document.createElement("tbody");
+        rows.forEach((row) => {
+            const nutrientRaw = row?.nutrient ?? row?.Nutrient ?? row?.NUTRIENT;
+            const valueRaw = row?.value ?? row?.Value ?? row?.VALUE;
+            const nutrient = String(nutrientRaw || "").trim();
+            if (!nutrient) {
+                return;
+            }
+            const tr = document.createElement("tr");
+            const nutrientTd = document.createElement("td");
+            nutrientTd.textContent = nutrient;
+            const valueTd = document.createElement("td");
+            valueTd.textContent = valueRaw ?? "";
+            tr.appendChild(nutrientTd);
+            tr.appendChild(valueTd);
+            tbody.appendChild(tr);
+        });
+
+        tableEl.innerHTML = "";
+        tableEl.appendChild(thead);
+        tableEl.appendChild(tbody);
+    }
+
+    function loadNutrientTable(endpoint, tableEl, statusEl, label) {
+        if (!tableEl || !statusEl) {
+            return;
+        }
+        statusEl.textContent = `Loading ${label} values...`;
+        fetch(endpoint, { credentials: "same-origin" })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((rows) => {
+                const data = Array.isArray(rows) ? rows.slice() : [];
+                data.sort((a, b) => {
+                    const aName = String(a?.nutrient ?? a?.Nutrient ?? a?.NUTRIENT ?? "");
+                    const bName = String(b?.nutrient ?? b?.Nutrient ?? b?.NUTRIENT ?? "");
+                    return aName.localeCompare(bName);
+                });
+                if (data.length === 0) {
+                    tableEl.innerHTML = "";
+                    statusEl.textContent = `No ${label} values found.`;
+                    return;
+                }
+                renderNutrientTable(tableEl, data);
+                statusEl.textContent = `Loaded ${data.length} ${label} values.`;
+            })
+            .catch((error) => {
+                tableEl.innerHTML = "";
+                statusEl.textContent = `Failed to load ${label} values: ${error.message}`;
+            });
+    }
+
+    if (rdaTable || ulTable) {
+        loadNutrientTable("/api/rda", rdaTable, rdaStatus, "RDA");
+        loadNutrientTable("/api/ul", ulTable, ulStatus, "UL");
+    }
 
     const dietItemsHead = document.getElementById("diet-items-head");
     const dietItemsBody = document.getElementById("diet-items-body");

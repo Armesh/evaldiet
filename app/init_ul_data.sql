@@ -8,7 +8,7 @@ INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Selenium, 
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Manganese, Mn mg', '11.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Fluoride, F µg', '10000.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin A, RAE µg', '3000.0');
-INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin D (D2 + D3), International Units IU', '4000.0');
+INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin D (D2 + D3), International Units IU', '5000.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin D (D2 + D3) µg', '100.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin E (alpha-tocopherol) mg', '1000.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin B-6 mg', '100.0');

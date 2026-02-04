@@ -305,6 +305,10 @@ def edit_food(request: Request, fdc_id: int, user: dict = Depends(verify_auth_to
 def tutorial_page(request: Request, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("tutorial.html", {"request": request})
 
+@app.get("/ui/rda_ul")
+def rda_ul_page(request: Request, user: dict = Depends(verify_auth_token_get_user)):
+    return templates.TemplateResponse("rda_ul.html", {"request": request})
+
 @app.get("/ui/settings")
 def settings_page(request: Request, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("settings.html", {"request": request})
