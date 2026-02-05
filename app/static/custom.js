@@ -1168,7 +1168,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const ulTable = document.getElementById("ul-table");
     const ulStatus = document.getElementById("ul-status");
 
-    function renderNutrientTable(tableEl, rows) {
+    function renderNutrientTable(tableEl, rows, label) {
         if (!tableEl) {
             return;
         }
@@ -1183,6 +1183,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const tbody = document.createElement("tbody");
         rows.forEach((row) => {
+            const idRaw = row?.id ?? row?.ID;
             const nutrientRaw = row?.nutrient ?? row?.Nutrient ?? row?.NUTRIENT;
             const valueRaw = row?.value ?? row?.Value ?? row?.VALUE;
             const nutrient = String(nutrientRaw || "").trim();
@@ -1193,7 +1194,17 @@ document.addEventListener("DOMContentLoaded", () => {
             const nutrientTd = document.createElement("td");
             nutrientTd.textContent = nutrient;
             const valueTd = document.createElement("td");
-            valueTd.textContent = valueRaw ?? "";
+            const input = document.createElement("input");
+            input.type = "number";
+            input.step = "any";
+            input.className = "form-control form-control-sm nutrient-value-input";
+            input.value = valueRaw ?? "";
+            input.dataset.id = idRaw ?? "";
+            input.dataset.nutrient = nutrient;
+            if (label) {
+                input.setAttribute("aria-label", `${label} value for ${nutrient}`);
+            }
+            valueTd.appendChild(input);
             tr.appendChild(nutrientTd);
             tr.appendChild(valueTd);
             tbody.appendChild(tr);
@@ -1207,6 +1218,18 @@ document.addEventListener("DOMContentLoaded", () => {
     function loadNutrientTable(endpoint, tableEl, statusEl, label) {
         if (!tableEl || !statusEl) {
             return;
+        }
+        const toast = document.getElementById("diet-columns-toast");
+        let toastTimer = null;
+        function showToast() {
+            if (!toast) return;
+            toast.classList.add("is-visible");
+            if (toastTimer) {
+                clearTimeout(toastTimer);
+            }
+            toastTimer = setTimeout(() => {
+                toast.classList.remove("is-visible");
+            }, 1600);
         }
         statusEl.textContent = `Loading ${label} values...`;
         fetch(endpoint, { credentials: "same-origin" })
@@ -1228,13 +1251,55 @@ document.addEventListener("DOMContentLoaded", () => {
                     statusEl.textContent = `No ${label} values found.`;
                     return;
                 }
-                renderNutrientTable(tableEl, data);
+                renderNutrientTable(tableEl, data, label);
                 statusEl.textContent = `Loaded ${data.length} ${label} values.`;
             })
             .catch((error) => {
                 tableEl.innerHTML = "";
                 statusEl.textContent = `Failed to load ${label} values: ${error.message}`;
             });
+
+        if (!tableEl._nutrientHandlerAttached) {
+            tableEl.addEventListener("change", (event) => {
+                const input = event.target?.closest?.("input.nutrient-value-input");
+                if (!input || !tableEl.contains(input)) {
+                    return;
+                }
+                const id = String(input.dataset.id || "").trim();
+                const nutrient = String(input.dataset.nutrient || "").trim();
+                const value = Number(input.value);
+                if (!id) {
+                    statusEl.textContent = `${label} update failed: missing id.`;
+                    return;
+                }
+                if (!Number.isFinite(value)) {
+                    statusEl.textContent = `${label} update failed: invalid value.`;
+                    return;
+                }
+                statusEl.textContent = "Saving...";
+                fetch(`${endpoint}/${encodeURIComponent(id)}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "same-origin",
+                    body: JSON.stringify({ value, nutrient }),
+                })
+                    .then((response) => {
+                        if (!response.ok) {
+                            throw new Error(`Request failed with ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then((result) => {
+                        const name = result?.nutrient || nutrient || "item";
+                        statusEl.textContent = `${label} updated: ${name}.`;
+                        showToast();
+                    })
+                    .catch((error) => {
+                        statusEl.textContent = `${label} update failed: ${error.message}`;
+                    });
+            });
+            tableEl._nutrientHandlerAttached = true;
+        }
     }
 
     if (rdaTable || ulTable) {

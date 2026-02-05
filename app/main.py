@@ -717,6 +717,29 @@ def get_rda(user: dict = Depends(verify_auth_token_get_user)):
         if conn is not None:
             conn.close()
 
+@app.put("/api/rda/{id}")
+def update_rda(id: int, payload: RDAUpdate, user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
+    value = float(payload.value)
+
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT nutrient FROM RDA WHERE id = ? AND user_id = ? LIMIT 1", (id, user_id))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="RDA not found")
+        nutrient_name = str(row[0] or "").strip()
+
+        cur.execute(
+            "UPDATE RDA SET value = ? WHERE id = ? AND user_id = ?",
+            (value, id, user_id),
+        )
+        conn.commit()
+        return JSONResponse({"detail": f"Updated RDA {nutrient_name}"}, status_code=200)
+    finally:
+        conn.close()
+
 @app.get("/api/ul")
 def get_ul(user: dict = Depends(verify_auth_token_get_user)):
     conn = None
@@ -732,6 +755,29 @@ def get_ul(user: dict = Depends(verify_auth_token_get_user)):
     finally:
         if conn is not None:
             conn.close()
+
+@app.put("/api/ul/{id}")
+def update_ul(id: int, payload: ULUpdate, user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
+    value = float(payload.value)
+
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT nutrient FROM UL WHERE id = ? AND user_id = ? LIMIT 1", (id, user_id))
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="UL not found")
+        nutrient_name = str(row[0] or "").strip()
+
+        cur.execute(
+            "UPDATE UL SET value = ? WHERE id = ? AND user_id = ?",
+            (value, id, user_id),
+        )
+        conn.commit()
+        return JSONResponse({"detail": f"Updated UL {nutrient_name}"}, status_code=200)
+    finally:
+        conn.close()
 
 @app.post("/api/diet")
 def create_diet(payload: DietCreate, user: dict = Depends(verify_auth_token_get_user)):
@@ -876,5 +922,3 @@ def handle_httpx_exception(e: Exception):
             "traceback": traceback.format_exc(),
         },
     )
-
-

@@ -28,3 +28,11 @@ class DietDelete(BaseModel):
     quantity: float | None = None
     sort_order: int | None = None
     delete_all: bool = False
+
+class ULUpdate(BaseModel):
+    nutrient: str | None = None
+    value: float
+
+class RDAUpdate(BaseModel):
+    nutrient: str | None = None
+    value: float
