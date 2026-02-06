@@ -29,6 +29,19 @@ function coerceNumber(value, fallback) {
     return Number.isFinite(num) ? num : fallback;
 }
 
+let msgToastTimer = null;
+function showMsgToast() {
+    const toast = document.querySelector(".msg-toast");
+    if (!toast) return;
+    toast.classList.add("is-visible");
+    if (msgToastTimer) {
+        clearTimeout(msgToastTimer);
+    }
+    msgToastTimer = setTimeout(() => {
+        toast.classList.remove("is-visible");
+    }, 1600);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     const DIET_COLOR_SWATCHES_DARK = ["#971d1f", "#ad5322", "#af882e", "#538d28", "#2b8066", "#375875"];
     const DIET_COLOR_SWATCHES_LIGHT = ["#d86a6b", "#d68a5a", "#d6b46a", "#8cc26a", "#6bb59c", "#7aa0b5"];
@@ -304,7 +317,11 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             colorSaveTimer = setTimeout(() => {
                 colorSaveTimer = null;
-                saveUserSettings(nextSettings).catch(() => {});
+                saveUserSettings(nextSettings)
+                    .then(() => {
+                        showMsgToast();
+                    })
+                    .catch(() => {});
             }, 250);
         }
         const { stored } = applyDominantColorsFromStorage();
@@ -829,18 +846,16 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         return loadUserSettings().then(() => {
-        const list = document.getElementById("diet-columns-list");
-        const saveBtn = document.getElementById("diet-columns-save");
-        const status = document.getElementById("diet-columns-status");
-        const countBadge = document.getElementById("diet-columns-selected-count");
-        const toast = document.getElementById("diet-columns-toast");
-        const resetAllBtn = document.getElementById("settings-reset-all");
-        const resetAllStatus = document.getElementById("settings-reset-status");
-        if (!list || !saveBtn) {
-            return;
-        }
-        let originalSelection = new Set(getSelectedDietColumns());
-        let toastTimer = null;
+            const list = document.getElementById("diet-columns-list");
+            const saveBtn = document.getElementById("diet-columns-save");
+            const status = document.getElementById("diet-columns-status");
+            const countBadge = document.getElementById("diet-columns-selected-count");
+            const resetAllBtn = document.getElementById("settings-reset-all");
+            const resetAllStatus = document.getElementById("settings-reset-status");
+            if (!list || !saveBtn) {
+                return;
+            }
+            let originalSelection = new Set(getSelectedDietColumns());
 
         function renderList(columns) {
             const selected = new Set(getSelectedDietColumns());
@@ -914,17 +929,6 @@ document.addEventListener("DOMContentLoaded", () => {
             saveBtn.disabled = selectionsEqual(current, originalSelection);
         }
 
-        function showToast() {
-            if (!toast) return;
-            toast.classList.add("is-visible");
-            if (toastTimer) {
-                clearTimeout(toastTimer);
-            }
-            toastTimer = setTimeout(() => {
-                toast.classList.remove("is-visible");
-            }, 1600);
-        }
-
         function loadDietColumnsFromApi() {
             status.textContent = "Loading columns...";
             return fetch("/api/foods", { credentials: "same-origin" })
@@ -995,6 +999,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                     updateSelectedCount();
                     updateSaveEnabled();
+                    showMsgToast();
                     if (resetAllStatus) {
                         resetAllStatus.textContent = "Reset to default.";
                     }
@@ -1031,46 +1036,25 @@ document.addEventListener("DOMContentLoaded", () => {
                     originalSelection = new Set(settings.diet_columns);
                     updateSaveEnabled();
                     updateSelectedCount();
-                    showToast();
+                    showMsgToast();
                 })
                 .catch((error) => {
                     status.textContent = `Save failed: ${error.message}`;
                 });
         });
 
-        if (rdaThresholdInput) {
-            rdaThresholdInput.addEventListener("input", () => {
-                if (thresholdsStatus) {
-                    thresholdsStatus.textContent = "Saving...";
-                }
-                scheduleThresholdSave();
-            });
-        }
-        if (ulThresholdInput) {
-            ulThresholdInput.addEventListener("input", () => {
-                if (thresholdsStatus) {
-                    thresholdsStatus.textContent = "Saving...";
-                }
-                scheduleThresholdSave();
-            });
-        }
-        if (hideRdaUlValuesInput) {
-            hideRdaUlValuesInput.addEventListener("change", () => {
-                if (thresholdsStatus) {
-                    thresholdsStatus.textContent = "Saving...";
-                }
-                scheduleThresholdSave();
-            });
-        }
-        if (resetAllBtn) {
-            resetAllBtn.addEventListener("click", () => {
-                resetAllSettings();
-            });
-        }
+            if (resetAllBtn) {
+                resetAllBtn.addEventListener("click", () => {
+                    resetAllSettings();
+                });
+            }
         });
     }
 
     function initDietThresholds() {
+        if (window.location.pathname !== "/ui/rda_ul") {
+            return;
+        }
         const rdaThresholdInput = document.getElementById("diet-rda-threshold");
         const ulThresholdInput = document.getElementById("diet-ul-threshold");
         const hideRdaUlValuesInput = document.getElementById("diet-hide-rda-ul-values");
@@ -1117,6 +1101,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         if (thresholdsStatus) {
                             thresholdsStatus.textContent = "Saved.";
                         }
+                        showMsgToast();
                     })
                     .catch((error) => {
                         if (thresholdsStatus) {
@@ -1219,18 +1204,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!tableEl || !statusEl) {
             return;
         }
-        const toast = document.getElementById("diet-columns-toast");
-        let toastTimer = null;
-        function showToast() {
-            if (!toast) return;
-            toast.classList.add("is-visible");
-            if (toastTimer) {
-                clearTimeout(toastTimer);
-            }
-            toastTimer = setTimeout(() => {
-                toast.classList.remove("is-visible");
-            }, 1600);
-        }
         statusEl.textContent = `Loading ${label} values...`;
         fetch(endpoint, { credentials: "same-origin" })
             .then((response) => {
@@ -1292,7 +1265,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     .then((result) => {
                         const name = result?.nutrient || nutrient || "item";
                         statusEl.textContent = `${label} updated: ${name}.`;
-                        showToast();
+                        showMsgToast();
                     })
                     .catch((error) => {
                         statusEl.textContent = `${label} update failed: ${error.message}`;
@@ -1315,7 +1288,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const dietItemsAdd = document.getElementById("diet-items-add");
     const dietItemsClone = document.getElementById("diet-items-clone");
     const dietItemsDeleteAll = document.getElementById("diet-items-delete-all");
-    const dietAutoSaveToast = document.getElementById("diet-auto-save-toast");
+    const dietAutoSaveToast = document.querySelector(".msg-toast");
     if (!dietItemsHead || !dietItemsBody || !dietItemsStatus || !dietItemsAdd) return;
     const dietItemsTable = dietItemsBody.closest("table");
     let autoSaveTimer = null;

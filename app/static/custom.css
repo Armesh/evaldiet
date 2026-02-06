@@ -1,4 +1,4 @@
-.diet-auto-save-toast {
+.msg-toast {
   position: fixed;
   left: 1rem;
   bottom: 1rem;
@@ -19,12 +19,12 @@
   z-index: 1050;
 }
 
-.diet-auto-save-toast.is-visible {
+.msg-toast.is-visible {
   opacity: 1;
   transform: translateY(0);
 }
 
-.diet-auto-save-toast .bi {
+.msg-toast .bi {
   color: #3cc45a;
 }
 

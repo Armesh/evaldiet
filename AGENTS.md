@@ -28,6 +28,7 @@ This repo is a small diet/foods web app. Use this file as the single source of t
 - For diet items table editing: do not auto-save mid-edit; save only when leaving edit mode (clicking outside/switching rows/Escape).
 - Always re-check the latest file state before answering questions about current contents.
 - In foods edit UI, "Vitamin K, total µg" is a generated field and must not be editable or shown.
+- Toasts: use the `msg-toast` class (no id), and ensure only one toast per page.
 - SQLite must always enforce foreign keys.
 - Never change the database schema or data unless explicitly instructed.
 - When editing HTML, keep attributes on a single line when reasonable; elements can span multiple lines.
