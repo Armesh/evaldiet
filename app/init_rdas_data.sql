@@ -18,3 +18,6 @@ INSERT INTO "main"."RDA" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin B
 INSERT INTO "main"."RDA" ("user_id", "nutrient", "value") VALUES (xx, 'Choline, total mg', '550.0');
 INSERT INTO "main"."RDA" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin E (alpha-tocopherol) mg', '15.0');
 INSERT INTO "main"."RDA" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin K, total µg', '100.0');
+INSERT INTO "main"."RDA" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin A, RAE µg', '900.0');
+INSERT INTO "main"."RDA" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin D (D2 + D3), International Units IU', '600.0');
+INSERT INTO "main"."RDA" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin D (D2 + D3) µg', '15.0');

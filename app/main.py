@@ -233,16 +233,7 @@ def register_submit(
         if conn is not None:
             conn.close()
 
-    response = JSONResponse({"detail": "Registration Successful"}, status_code=200)
-    response.set_cookie(
-        key="auth_token",
-        value=hashed_password,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-        path="/",
-        max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),
-    )
+    response = login_submit(request, username=username, password=password)
     response.delete_cookie(key="reg_code", path="/")
     return response
 
@@ -262,6 +253,11 @@ def login_submit(request: Request, username: str = Form(...), password: str = Fo
         verified = verify_password(password, stored_password)
         if not verified:
             raise HTTPException(status_code=401, detail="Invalid username or password")
+        cur.execute(
+            "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
+            (user["id"],),
+        )
+        conn.commit()
     except HTTPException:
         raise
     except Exception as exc:

@@ -9,7 +9,7 @@ INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Manganese,
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Fluoride, F µg', '10000.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin A, RAE µg', '3000.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin D (D2 + D3), International Units IU', '5000.0');
-INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin D (D2 + D3) µg', '100.0');
+INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin D (D2 + D3) µg', '125.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin E (alpha-tocopherol) mg', '1000.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Vitamin B-6 mg', '100.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Folic acid µg', '1000.0');
@@ -17,4 +17,3 @@ INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Niacin mg'
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Choline, total mg', '3500.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Cholesterol mg', '200.0');
 INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Fatty acids, total saturated g', '22.0');
-INSERT INTO "main"."UL" ("user_id", "nutrient", "value") VALUES (xx, 'Retinol µg', '3000.0');
