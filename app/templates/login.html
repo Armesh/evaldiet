@@ -1,11 +1,14 @@
 <!doctype html>
 <html lang="en">
   {% include "/partials/head.html" %}
-  <body class="bg-body-tertiary" data-bs-theme="dark">
+  <body class="bg-body-tertiary" data-bs-theme="dark" style="background: url('{{ url_for('static', path='login_bg.jpg') }}') center/cover no-repeat fixed;">
     <div class="d-flex align-items-center justify-content-center min-vh-100 px-3">
       <div class="card shadow-sm border-0" style="max-width: 420px; width: 100%;">
         <div class="card-body p-4">
-          <h1 class="h4 mb-3">Login</h1>
+          <div class="text-center mb-3">
+            <img src="{{ url_for('static', path='logo.png') }}" alt="EvalDiet logo" style="max-width: 160px; height: auto;" />
+            <div class="h5 mt-2 mb-0">EvalDiet</div>
+          </div>
           <div id="login-error" class="alert alert-danger py-2 d-none" role="alert"></div>
 
           <form id="login-form" method="post" action="/api/login">
@@ -34,8 +37,8 @@
             </div>
             <button type="submit" class="btn btn-primary w-100">Sign in</button>
           </form>
-          <div class="text-center mt-3">
-            <a href="/ui/register">Create an account</a>
+          <div class="mt-3">
+            <a href="/ui/register" class="btn btn-outline-light w-100">Create an account</a>
           </div>
         </div>
       </div>
