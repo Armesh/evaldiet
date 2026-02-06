@@ -1602,7 +1602,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     document.addEventListener("keydown", (event) => {
-        if (event.key !== "Escape") {
+        if (event.key !== "Escape" && event.key !== "Enter") {
             return;
         }
         if (!activeEditRow) {
