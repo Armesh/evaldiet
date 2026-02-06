@@ -737,6 +737,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const dietUlThresholdKey = "diet_ul_threshold";
     const dietHideRdaUlValuesKey = "diet_hide_rda_ul_values";
     const requiredDietColumns = ["diet_name", "fdc_id", "quantity", "sort_order", "color"];
+    const excludedDietColumns = ["Serving Size"];
 
     function normalizeSettings(settings) {
         const source = settings && typeof settings === "object" ? settings : {};
@@ -863,7 +864,7 @@ document.addEventListener("DOMContentLoaded", () => {
             list.innerHTML = "";
             let selectedCount = 0;
             columns.forEach((col) => {
-                if (requiredSet.has(col)) {
+                if (requiredSet.has(col) || excludedDietColumns.includes(col)) {
                     return;
                 }
                 const wrapper = document.createElement("div");
