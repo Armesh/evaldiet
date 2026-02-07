@@ -9,6 +9,16 @@ from fastapi.responses import FileResponse
 def get_db_path() -> str:
     return os.getenv("EVALDIET_DB_PATH", "app/evaldiet.db")
 
+
+def get_db_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(get_db_path())
+    conn.execute("PRAGMA foreign_keys = ON")
+    # Enforce FK support for every connection.
+    fk_enabled = conn.execute("PRAGMA foreign_keys").fetchone()
+    if not fk_enabled or fk_enabled[0] != 1:
+        raise RuntimeError("SQLite foreign_keys must be enabled.")
+    return conn
+
 def verify_db_ops_pass(provided_pass: str | None):
     expected = os.getenv("DB_OPS_PASS")
     if not expected:
@@ -38,13 +48,8 @@ def get_db_router():
         if os.path.exists(db_path):
             raise HTTPException(status_code=400, detail="Database already exists. Recreate aborted.")
 
-        conn = sqlite3.connect(db_path)
+        conn = get_db_conn()
         try:
-            conn.execute("PRAGMA foreign_keys = ON")
-            fk_enabled = conn.execute("PRAGMA foreign_keys").fetchone()
-            if not fk_enabled or fk_enabled[0] != 1:
-                raise RuntimeError("SQLite foreign_keys must be enabled.")
-
             conn.executescript(
                 """
 CREATE TABLE users (

@@ -22,7 +22,7 @@ from fastapi.templating import Jinja2Templates
 
 from fastapi.staticfiles import StaticFiles
 from app.models import *
-from app.db_routes import get_db_router
+from app.db_routes import get_db_router, get_db_conn
 import re
 
 load_dotenv()  # loads .env from current working directory
@@ -924,18 +924,6 @@ def update_diet_name_only(payload: DietNameUpdate, user: dict = Depends(verify_a
     finally:
         if conn is not None:
             conn.close()
-
-def get_db_path() -> str:
-    return os.getenv("EVALDIET_DB_PATH", "app/evaldiet.db")
-
-def get_db_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(get_db_path())
-    conn.execute("PRAGMA foreign_keys = ON")
-    # Enforce FK support for every connection.
-    fk_enabled = conn.execute("PRAGMA foreign_keys").fetchone()
-    if not fk_enabled or fk_enabled[0] != 1:
-        raise RuntimeError("SQLite foreign_keys must be enabled.")
-    return conn
 
 def handle_httpx_exception(e: Exception):
     if isinstance(e, httpx.HTTPStatusError):
