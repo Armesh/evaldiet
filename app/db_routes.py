@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 
 
 def get_db_path() -> str:
-    return os.getenv("EVALDIET_DB_PATH", "app/evaldiet.db")
+    return os.getenv("EVALDIET_DB_PATH", "evaldiet.sqlite3")
 
 
 def get_db_conn() -> sqlite3.Connection:
@@ -39,14 +39,23 @@ def get_db_router():
         db_path = get_db_path()
         if not os.path.exists(db_path):
             raise HTTPException(status_code=404, detail="Database not found")
-        return FileResponse(db_path, media_type="application/octet-stream", filename="evaldiet.db")
+        return FileResponse(db_path, media_type="application/octet-stream", filename="evaldiet.sqlite3")
 
     @router.post("/api/admin/create_db")
-    def recreate_db(payload: DbOpsPassPayload):
+    def create_db(payload: DbOpsPassPayload):
         verify_db_ops_pass(payload.db_ops_pass)
         db_path = get_db_path()
         if os.path.exists(db_path):
-            raise HTTPException(status_code=400, detail="Database already exists. Recreate aborted.")
+            if not os.path.isfile(db_path):
+                raise HTTPException(status_code=400, detail="Database path is not a file. Create aborted.")
+
+            try:
+                if os.path.getsize(db_path) < 40 * 1024:
+                    os.remove(db_path)  # Existing faulty DB is removed
+                else:
+                    raise HTTPException(status_code=400, detail=f"Database {db_path} already exists. Create aborted.")
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=str(exc))
 
         conn = get_db_conn()
         try:

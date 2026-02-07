@@ -119,6 +119,8 @@ def root(request: Request, user: dict = Depends(verify_auth_token_get_user)):
         cur.execute("SELECT diet_name FROM diets WHERE user_id = ? ORDER BY diet_name ASC LIMIT 1", (user_id,))
         row = cur.fetchone()
         diet_name = row[0] if row else ""
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
@@ -678,6 +680,8 @@ def get_diets(diet_name: str = "*", user: dict = Depends(verify_auth_token_get_u
 
         rows = cur.fetchall()
         return strip_user_id([dict(row) for row in rows])
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
@@ -730,6 +734,8 @@ def diets_nutrition(diet_name: str, user: dict = Depends(verify_auth_token_get_u
             diet_calculated.append(merged)
 
         return diet_calculated
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
@@ -746,6 +752,8 @@ def get_rda(user: dict = Depends(verify_auth_token_get_user)):
         cur.execute("SELECT * FROM RDA WHERE user_id = ?", (user["id"],))
         rows = cur.fetchall()
         return strip_user_id([dict(row) for row in rows])
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
@@ -757,6 +765,7 @@ def update_rda(id: int, payload: RDAUpdate, user: dict = Depends(verify_auth_tok
     user_id = user["id"]
     value = float(payload.value)
 
+    conn = None
     try:
         conn = get_db_conn()
         cur = conn.cursor()
@@ -773,7 +782,8 @@ def update_rda(id: int, payload: RDAUpdate, user: dict = Depends(verify_auth_tok
         conn.commit()
         return JSONResponse({"detail": f"Updated RDA {nutrient_name}"}, status_code=200)
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 @app.get("/api/ul")
 def get_ul(user: dict = Depends(verify_auth_token_get_user)):
@@ -785,6 +795,8 @@ def get_ul(user: dict = Depends(verify_auth_token_get_user)):
         cur.execute("SELECT * FROM UL WHERE user_id = ?", (user["id"],))
         rows = cur.fetchall()
         return strip_user_id([dict(row) for row in rows])
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
@@ -796,6 +808,7 @@ def update_ul(id: int, payload: ULUpdate, user: dict = Depends(verify_auth_token
     user_id = user["id"]
     value = float(payload.value)
 
+    conn = None
     try:
         conn = get_db_conn()
         cur = conn.cursor()
@@ -812,7 +825,8 @@ def update_ul(id: int, payload: ULUpdate, user: dict = Depends(verify_auth_token
         conn.commit()
         return JSONResponse({"detail": f"Updated UL {nutrient_name}"}, status_code=200)
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 @app.post("/api/diet")
 def create_diet(payload: DietCreate, user: dict = Depends(verify_auth_token_get_user)):
@@ -829,6 +843,8 @@ def create_diet(payload: DietCreate, user: dict = Depends(verify_auth_token_get_
         )
         conn.commit()
         return {"created": cur.rowcount}
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
