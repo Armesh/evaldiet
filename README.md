@@ -2,7 +2,7 @@ Install uv on your operating system. https://docs.astral.sh/uv/getting-started/i
 Open Command Prompt or shell in this directory.
 
 
-Run below command to create/activate the environment and install deps:
+Run below command to create the project python virtual environment & install project dependencies:
    - `uv sync`
 
 Start the server:
