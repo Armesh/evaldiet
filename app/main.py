@@ -287,7 +287,7 @@ def login_submit(request: Request, username: str = Form(...), password: str = Fo
         secure=False,         # True in prod (HTTPS)
         samesite="lax",       # Same-domain
         path="/",
-        max_age=int(os.environ.get("AuthCookieExpireSecs", 60 * 60 * 24 * 365 * 10)) #default 10 years
+        max_age=int(os.getenv("AuthCookieExpireSecs", 60 * 60 * 24 * 365 * 10)) #default 10 years
     )
     return response
 
@@ -411,7 +411,7 @@ def update_me(payload: dict = Body(...), user: dict = Depends(verify_auth_token_
             conn.close()
 
     response = JSONResponse({"updated": True}, status_code=200)
-    max_age = int(os.environ.get("AuthCookieExpireSecs", 3600))
+    max_age = int(os.getenv("AuthCookieExpireSecs", 60 * 60 * 24 * 365 * 10)) #default 10 years
     if new_hashed_password:
         response.set_cookie(
             key="auth_token",

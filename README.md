@@ -13,6 +13,6 @@ Open the app in your browser:
    - `http://127.0.0.1:8000`
 
 Notes:
-- Set required environment variables in a `.env` file:
+- Set optional environment variables in a `.env` file:
   - `AuthCookieExpireSecs` (default: `3600`)
   - `EVALDIET_DB_PATH` (optional, default: `app/evaldiet.db`)
