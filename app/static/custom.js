@@ -253,6 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const foodsTableHead = document.getElementById("foods-table-head");
     const foodsTableBody = document.getElementById("foods-table-body");
     const foodsStatus = document.getElementById("foods-status");
+    const foodsCreateBtn = document.getElementById("foods-create-btn");
     const foodsFdcForm = document.getElementById("foods-fdc-form");
     const foodsFdcInput = document.getElementById("foods-fdc-id");
     const foodColorProtein = document.getElementById("food-color-protein");
@@ -503,8 +504,52 @@ document.addEventListener("DOMContentLoaded", () => {
             });
     }
 
+    function createFoodWithDatetime() {
+        if (!foodsCreateBtn) {
+            return;
+        }
+        const name = `New Food ${new Date().toISOString()}`;
+        foodsCreateBtn.disabled = true;
+        fetch("/api/foods/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({ name }),
+        })
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                }
+                return response.json();
+            })
+            .then((data) => {
+                const fdcId = data?.fdc_id;
+                if (fdcId != null) {
+                    alert(`Created food ${fdcId} (${name}).`);
+                    window.location.href = `/ui/foods/edit/${encodeURIComponent(fdcId)}`;
+                    return;
+                }
+                window.location.reload();
+            })
+            .catch((error) => {
+                alert(`Failed to create food: ${error.message}`);
+            })
+            .finally(() => {
+                foodsCreateBtn.disabled = false;
+            });
+    }
+
     if (foodsTableHead && foodsTableBody && foodsStatus) {
         loadFoods();
+    }
+
+    if (foodsCreateBtn && !foodsCreateBtn._createHandlerAttached) {
+        foodsCreateBtn.addEventListener("click", () => {
+            createFoodWithDatetime();
+        });
+        foodsCreateBtn._createHandlerAttached = true;
     }
 
     const foodsTable = document.getElementById("foods-table");

@@ -36,3 +36,9 @@ class ULUpdate(BaseModel):
 class RDAUpdate(BaseModel):
     nutrient: str | None = None
     value: float
+
+class FoodCreate(BaseModel):
+    name: str
+
+    class Config:
+        extra = "forbid"

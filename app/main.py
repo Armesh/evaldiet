@@ -481,6 +481,37 @@ def get_foods(fdc_id: int | None = None, user: dict = Depends(verify_auth_token_
         if conn is not None:
             conn.close()
 
+@app.post("/api/foods/")
+def create_food(payload: FoodCreate, user: dict = Depends(verify_auth_token_get_user)):
+    user_id = user["id"]
+    name = str(payload.name).strip()
+    conn = None
+    try:
+        conn = get_db_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM foods WHERE user_id = ? AND Name = ? LIMIT 1", (user_id, name))
+        if cur.fetchone() is not None:
+            raise HTTPException(status_code=400, detail="Food Name already exists")
+
+        cur.execute(
+            "SELECT COALESCE(MAX(fdc_id), 0) + 1 FROM foods WHERE user_id = ? AND fdc_id < 1000", #below 1000 are custom food ids, they will never be a real FDC ID, thus no conflict which foods added from USDA API
+            (user_id,),
+        )
+        next_fdc_id = cur.fetchone()[0]
+        cur.execute(
+            "INSERT INTO foods (user_id, fdc_id, Name) VALUES (?, ?, ?)",
+            (user_id, next_fdc_id, name),
+        )
+        conn.commit()
+        return {"message": f"Created{next_fdc_id} : {name}", "fdc_id": next_fdc_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if conn is not None:
+            conn.close()
+    
 @app.put("/api/foods/{fdcid}")
 def update_food(fdcid: int, payload: dict = Body(...), user: dict = Depends(verify_auth_token_get_user)):
     user_id = user["id"]
