@@ -253,6 +253,7 @@ def login_submit(request: Request, username: str = Form(...), password: str = Fo
         verified = verify_password(password, stored_password)
         if not verified:
             raise HTTPException(status_code=401, detail="Invalid username or password")
+        first_login = user["last_login"] is None
         cur.execute(
             "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
             (user["id"],),
@@ -266,7 +267,11 @@ def login_submit(request: Request, username: str = Form(...), password: str = Fo
         if conn is not None:
             conn.close()
 
-    response = JSONResponse({"detail": "Login Successful"}, status_code=200)
+    redirect_url = "/ui/tutorial" if first_login else "/"
+    response = JSONResponse(
+        {"detail": "Login Successful", "redirect_url": redirect_url},
+        status_code=200,
+    )
     # --- SET AUTH COOKIE HERE ---
     response.set_cookie(
         key="auth_token",
@@ -275,7 +280,7 @@ def login_submit(request: Request, username: str = Form(...), password: str = Fo
         secure=False,         # True in prod (HTTPS)
         samesite="lax",       # Same-domain
         path="/",
-        max_age=int(os.environ.get("AuthCookieExpireSecs", 3600)),      # 1 hour default
+        max_age=int(os.environ.get("AuthCookieExpireSecs", 60 * 60 * 24 * 365 * 10)) #default 10 years
     )
     return response
 

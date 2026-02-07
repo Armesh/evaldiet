@@ -81,9 +81,11 @@
           });
 
           let message = "Registration failed";
+          let redirectUrl = "/";
           try {
             const data = await response.json();
             message = data.detail || data.message || message;
+            redirectUrl = data.redirect_url || redirectUrl;
           } catch (e) {
             const text = await response.text();
             if (text) {
@@ -92,7 +94,7 @@
           }
 
           if (response.ok) {
-            window.location.href = "/";
+            window.location.href = redirectUrl;
             return;
           }
 
