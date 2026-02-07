@@ -1,10 +1,11 @@
 Install uv on your operating system. https://docs.astral.sh/uv/getting-started/installation/
+
 Open Command Prompt or shell in this directory.
 
 Run below command in project root folder to create the project python virtual environment & install project dependencies:
    - `uv sync`
 
-- Set below environment variables in a `.env` file:
+Set below environment variables in a `.env` file:
   - `AuthCookieExpireSecs` (default: `315360000`)
   - `EVALDIET_DB_PATH` (default: `evaldiet.sqlite3`)
   - `DB_OPS_PASS`
