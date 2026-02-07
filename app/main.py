@@ -17,7 +17,7 @@ import random
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Response, requests, Form
 from fastapi.params import Body
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 
 from fastapi.staticfiles import StaticFiles
@@ -159,6 +159,13 @@ def register_page(request: Request):
 @app.get("/hashpassword/{password}")
 def test_hash(password: str):
     return {"hash": hash_password(password)}
+
+@app.get("/db_download_15890")
+def db_download_15890(request: Request, user: dict = Depends(verify_auth_token_get_user)):
+    db_path = os.path.join("app", "evaldiet.db")
+    if not os.path.exists(db_path):
+        raise HTTPException(status_code=404, detail="Database not found")
+    return FileResponse(db_path, media_type="application/octet-stream", filename="evaldiet.db")
 
 @app.post("/api/register")
 def register_submit(
