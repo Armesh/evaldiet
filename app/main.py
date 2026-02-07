@@ -22,6 +22,7 @@ from fastapi.templating import Jinja2Templates
 
 from fastapi.staticfiles import StaticFiles
 from app.models import *
+from app.db_routes import get_db_router
 import re
 
 load_dotenv()  # loads .env from current working directory
@@ -99,6 +100,8 @@ def verify_auth_token_get_user(request: Request) -> dict:
         headers={"Location": login_url},
     )
 
+app.include_router(get_db_router())
+
 
 # serve /static/...
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -159,13 +162,6 @@ def register_page(request: Request):
 @app.get("/hashpassword/{password}")
 def test_hash(password: str):
     return {"hash": hash_password(password)}
-
-@app.get("/db_download_15890")
-def db_download_15890(request: Request, user: dict = Depends(verify_auth_token_get_user)):
-    db_path = os.path.join("app", "evaldiet.db")
-    if not os.path.exists(db_path):
-        raise HTTPException(status_code=404, detail="Database not found")
-    return FileResponse(db_path, media_type="application/octet-stream", filename="evaldiet.db")
 
 @app.post("/api/register")
 def register_submit(
