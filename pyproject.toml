@@ -3,7 +3,7 @@ name = "evaldiet"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.15"
 dependencies = [
     "fastapi[standard]>=0.128.0",
 ]
