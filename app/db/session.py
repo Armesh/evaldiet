@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from pydantic_settings import BaseSettings, SettingsError
+from pydantic_settings import BaseSettings, SettingsError, SettingsConfigDict
 
 
 # -------------------------------------------------------------------
@@ -10,15 +10,13 @@ from pydantic_settings import BaseSettings, SettingsError
 class Settings(BaseSettings):
     DATABASE_URL: str
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 try:
     settings = Settings()
 except SettingsError as exc:
     raise RuntimeError("DATABASE_URL must be set in environment or .env") from exc
-
 
 # -------------------------------------------------------------------
 # Engine + Session

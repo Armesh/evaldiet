@@ -1,6 +1,7 @@
 import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from app.db.models import Base
 from app.db.session import engine
@@ -19,6 +20,15 @@ def get_db_router():
 
     class DbOpsPassPayload(BaseModel):
         db_ops_pass: str | None = None
+
+    @router.get("/api/admin/db_health")
+    def db_health():
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return {"status": "ok"}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
     
     @router.post("/api/admin/create_db")
     def create_db(payload: DbOpsPassPayload):

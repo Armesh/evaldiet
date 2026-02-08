@@ -2,8 +2,8 @@ from contextlib import asynccontextmanager
 from random import random
 import string
 import traceback
+import logging
 import os
-import sqlite3
 import base64
 import hashlib
 import hmac
@@ -22,10 +22,15 @@ from fastapi.templating import Jinja2Templates
 
 from fastapi.staticfiles import StaticFiles
 from app.models import *
-from app.db_routes import get_db_router, get_db_conn
+from app.db_routes import get_db_router
+from app.db.session import SessionLocal
+from app.db.models import User, Food, Diet, RDA, UL, DEFAULT_SETTINGS
+from sqlalchemy import select, update, delete, func, text
+from sqlalchemy.orm import Session
 import re
 
 load_dotenv()  # loads .env from current working directory
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -74,24 +79,28 @@ def strip_user_id(data):
         return [strip_user_id(item) for item in data]
     return data
 
-def verify_auth_token_get_user(request: Request) -> dict:
+def model_to_dict(obj) -> dict:
+    return {col.name: getattr(obj, col.key) for col in obj.__table__.columns}
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def verify_auth_token_get_user(request: Request, db: Session = Depends(get_db)) -> dict:
     auth_token = request.cookies.get("auth_token")
 
     if auth_token:
-        conn = None
         try:
-            conn = get_db_conn()
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM users WHERE hashed_password = ? LIMIT 1", (auth_token,))
-            row = cur.fetchone()
-            if row is not None:
-                return dict(row)
+            user = db.execute(
+                select(User).where(User.hashed_password == auth_token).limit(1)
+            ).scalar_one_or_none()
+            if user is not None:
+                return model_to_dict(user)
         except Exception:
             pass
-        finally:
-            if conn is not None:
-                conn.close()
 
     login_url = "/ui/login"
     raise HTTPException(
@@ -109,23 +118,19 @@ templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["rand_id"] = random_alphanumeric
 
 @app.get("/")
-def root(request: Request, user: dict = Depends(verify_auth_token_get_user)):
+def root(request: Request, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
-    conn = None
     try:
-        conn = get_db_conn()
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT diet_name FROM diets WHERE user_id = ? ORDER BY diet_name ASC LIMIT 1", (user_id,))
-        row = cur.fetchone()
-        diet_name = row[0] if row else ""
+        diet_name = db.execute(
+            select(Diet.diet_name)
+            .where(Diet.user_id == user_id)
+            .order_by(Diet.diet_name.asc())
+            .limit(1)
+        ).scalar_one_or_none() or ""
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
     if diet_name:
         return RedirectResponse(url=f"/ui/diets?diet_name={diet_name}")
@@ -173,6 +178,7 @@ def register_submit(
     captcha_code: str = Form(...),
     captcha_check: str | None = Form(None),
 ):
+    raise HTTPException(status_code=501, detail="register_submit not migrated to PostgreSQL yet")
     conn = None
     try:
         reg_code = request.cookies.get("reg_code")
@@ -243,34 +249,25 @@ def register_submit(
     return response
 
 @app.post("/api/login")
-def login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
-    conn = None
+def login_submit(request: Request, username: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
     try:
-        conn = get_db_conn()
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE username = ? LIMIT 1", (username,))
-        user = cur.fetchone()
-        stored_password = user["hashed_password"] if user else None
+        user = db.execute(
+            select(User).where(User.username == username).limit(1)
+        ).scalar_one_or_none()
+        stored_password = user.hashed_password if user else None
         if not stored_password:
             raise HTTPException(status_code=401, detail="user doesn't exist")
 
         verified = verify_password(password, stored_password)
         if not verified:
             raise HTTPException(status_code=401, detail="Invalid username or password")
-        first_login = user["last_login"] is None
-        cur.execute(
-            "UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?",
-            (user["id"],),
-        )
-        conn.commit()
+        first_login = user.last_login is None
+        user.last_login = func.now()
+        db.commit()
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
     redirect_url = "/ui/tutorial" if first_login else "/"
     response = JSONResponse(
@@ -327,29 +324,25 @@ def update_profile_page(request: Request, user: dict = Depends(verify_auth_token
 
 
 @app.get("/api/users/me")
-def get_me(user: dict = Depends(verify_auth_token_get_user)):
-    conn = get_db_conn()
+def get_me(user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     try:
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE id= ? LIMIT 1", (user["id"],))
-        row = cur.fetchone()
-        if row is None:
+        db_user = db.execute(
+            select(User).where(User.id == user["id"]).limit(1)
+        ).scalar_one_or_none()
+        if db_user is None:
             raise HTTPException(status_code=404, detail="User not found")
-        user = dict(row)
-        user.pop("hashed_password", None)
+        user_dict = model_to_dict(db_user)
+        user_dict.pop("hashed_password", None)
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        conn.close()
-    return JSONResponse(user)
+    return JSONResponse(user_dict)
 
 
 
 @app.put("/api/users/me")
-def update_me(payload: dict = Body(...), user: dict = Depends(verify_auth_token_get_user)):
+def update_me(payload: dict = Body(...), user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
     username = payload.get("username") if isinstance(payload, dict) else None
     password = payload.get("password") if isinstance(payload, dict) else None
@@ -374,39 +367,48 @@ def update_me(payload: dict = Body(...), user: dict = Depends(verify_auth_token_
         settings_payload = payload.get("settings")
         try:
             if isinstance(settings_payload, str):
-                json.loads(settings_payload)
-                settings_json = settings_payload
+                settings_obj = json.loads(settings_payload)
             else:
-                settings_json = json.dumps(settings_payload)
+                settings_obj = settings_payload
+            if not isinstance(settings_obj, dict):
+                raise HTTPException(status_code=400, detail="Invalid settings payload")
+        except HTTPException:
+            raise
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid settings payload")
-        updates["settings"] = settings_json
+        updates["settings"] = settings_obj
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
-    conn = None
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
         if "username" in updates:
-            cur.execute("SELECT 1 FROM users WHERE username = ? AND id != ? LIMIT 1", (username, user_id))
-            if cur.fetchone() is not None:
+            existing = db.execute(
+                select(User.id)
+                .where(User.username == username, User.id != user_id)
+                .limit(1)
+            ).scalar_one_or_none()
+            if existing is not None:
                 raise HTTPException(status_code=400, detail="Username already exists")
 
-        set_clause = ", ".join([f"\"{col}\" = ?" for col in updates.keys()])
-        values = list(updates.values()) + [user_id]
-        cur.execute(f"UPDATE users SET {set_clause} WHERE id = ?", values)
-        conn.commit()
-        if cur.rowcount == 0:
+        db_user = db.execute(
+            select(User).where(User.id == user_id).limit(1)
+        ).scalar_one_or_none()
+        if db_user is None:
             raise HTTPException(status_code=404, detail="User not found")
+
+        if "username" in updates:
+            db_user.username = updates["username"]
+        if "hashed_password" in updates:
+            db_user.hashed_password = updates["hashed_password"]
+        if "settings" in updates:
+            db_user.settings = updates["settings"]
+
+        db.commit()
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
     response = JSONResponse({"updated": True}, status_code=200)
     max_age = int(os.getenv("AuthCookieExpireSecs", 60 * 60 * 24 * 365 * 10)) #default 10 years
@@ -423,103 +425,74 @@ def update_me(payload: dict = Body(...), user: dict = Depends(verify_auth_token_
     return response
 
 @app.post("/api/users/me/reset_settings")
-def reset_user_settings(user: dict = Depends(verify_auth_token_get_user)):
+def reset_user_settings(user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
-    conn = None
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute("SELECT dflt_value FROM pragma_table_info('users') WHERE name = 'settings'")
-        row = cur.fetchone()
-        if not row or row[0] is None:
-            raise HTTPException(status_code=500, detail="Settings default not defined")
-        default_value = str(row[0])
-        if len(default_value) >= 2 and default_value[0] == default_value[-1] and default_value[0] in ("'", '"'):
-            default_value = default_value[1:-1]
-        try:
-            parsed = json.loads(default_value)
-        except Exception:
-            raise HTTPException(status_code=500, detail="Invalid settings default JSON")
-        cur.execute("UPDATE users SET settings = ? WHERE id = ?", (default_value, user_id))
-        conn.commit()
-        if cur.rowcount == 0:
+        default_settings = dict(DEFAULT_SETTINGS)
+        db_user = db.execute(
+            select(User).where(User.id == user_id).limit(1)
+        ).scalar_one_or_none()
+        if db_user is None:
             raise HTTPException(status_code=404, detail="User not found")
-        return JSONResponse({"settings": parsed}, status_code=200)
+        db_user.settings = default_settings
+        db.commit()
+        return JSONResponse({"settings": default_settings}, status_code=200)
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 @app.get("/api/foods")
 @app.get("/api/foods/{fdc_id}")
-def get_foods(fdc_id: int | None = None, user: dict = Depends(verify_auth_token_get_user)):
+def get_foods(fdc_id: int | None = None, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
-    conn = None
     try:
-        conn = get_db_conn()
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
         if fdc_id is None:
-            cur.execute("SELECT * FROM foods WHERE user_id = ? ORDER BY fdc_id ASC", (user_id,))
-            rows = cur.fetchall()
-            return strip_user_id([dict(row) for row in rows])
-        cur.execute("SELECT * FROM foods WHERE fdc_id = ? AND user_id = ?", (fdc_id, user_id))
-        row = cur.fetchone()
+            rows = db.execute(
+                select(Food)
+                .where(Food.user_id == user_id)
+                .order_by(Food.fdc_id.asc())
+            ).scalars().all()
+            return strip_user_id([model_to_dict(row) for row in rows])
+        row = db.execute(
+            select(Food).where(Food.fdc_id == fdc_id, Food.user_id == user_id)
+        ).scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="Food not found")
-        return strip_user_id(dict(row))
+        return strip_user_id(model_to_dict(row))
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 @app.post("/api/foods/")
-def create_food(payload: FoodCreate, user: dict = Depends(verify_auth_token_get_user)):
+def create_food(payload: FoodCreate, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
     name = str(payload.name).strip()
-    conn = None
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute("SELECT 1 FROM foods WHERE user_id = ? AND Name = ? LIMIT 1", (user_id, name))
-        if cur.fetchone() is not None:
+        exists = db.execute(
+            select(Food.fdc_id).where(Food.user_id == user_id, Food.name == name).limit(1)
+        ).scalar_one_or_none()
+        if exists is not None:
             raise HTTPException(status_code=400, detail="Food Name already exists")
 
-        cur.execute(
-            "SELECT COALESCE(MAX(fdc_id), 0) + 1 FROM foods WHERE user_id = ? AND fdc_id < 1000", #below 1000 are custom food ids, they will never be a real FDC ID, thus no conflict which foods added from USDA API
-            (user_id,),
-        )
-        next_fdc_id = cur.fetchone()[0]
-        cur.execute(
-            "INSERT INTO foods (user_id, fdc_id, Name) VALUES (?, ?, ?)",
-            (user_id, next_fdc_id, name),
-        )
-        conn.commit()
+        next_fdc_id = db.execute(
+            select(func.coalesce(func.max(Food.fdc_id), 0) + 1)
+            .where(Food.user_id == user_id, Food.fdc_id < 1000)
+        ).scalar_one()
+        db.add(Food(user_id=user_id, fdc_id=next_fdc_id, name=name))
+        db.commit()
         return {"message": f"Created{next_fdc_id} : {name}", "fdc_id": next_fdc_id}
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
     
 @app.put("/api/foods/{fdcid}")
-def update_food(fdcid: int, payload: dict = Body(...), user: dict = Depends(verify_auth_token_get_user)):
+def update_food(fdcid: int, payload: dict = Body(...), user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
-    conn = None
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute("PRAGMA table_info(foods)")
-        cols = [row[1] for row in cur.fetchall()]
-        valid_cols = set(cols)
+        valid_cols = {col.name for col in Food.__table__.columns}
 
         new_fdc_id = None
         if payload and "fdc_id" in payload:
@@ -530,8 +503,10 @@ def update_food(fdcid: int, payload: dict = Body(...), user: dict = Depends(veri
             if new_fdc_id <= 0:
                 raise HTTPException(status_code=400, detail="Invalid fdc_id")
             if new_fdc_id != fdcid:
-                cur.execute("SELECT 1 FROM foods WHERE fdc_id = ? AND user_id = ?", (new_fdc_id, user_id))
-                if cur.fetchone() is not None:
+                exists = db.execute(
+                    select(Food.fdc_id).where(Food.fdc_id == new_fdc_id, Food.user_id == user_id).limit(1)
+                ).scalar_one_or_none()
+                if exists is not None:
                     raise HTTPException(status_code=400, detail="fdc_id already exists")
 
         updates = {}
@@ -546,48 +521,50 @@ def update_food(fdcid: int, payload: dict = Body(...), user: dict = Depends(veri
         if not updates:
             raise HTTPException(status_code=400, detail="No valid fields to update")
 
-        set_clause = ", ".join([f"\"{col.replace('\"', '\"\"')}\" = ?" for col in updates.keys()])
-        values = list(updates.values()) + [fdcid, user_id]
-        cur.execute(f"UPDATE foods SET {set_clause} WHERE fdc_id = ? AND user_id = ?", values)
-        conn.commit()
-        foodRowsUpdated = cur.rowcount
+        values = {Food.__table__.c[key]: value for key, value in updates.items()}
+        result = db.execute(
+            update(Food)
+            .where(Food.fdc_id == fdcid, Food.user_id == user_id)
+            .values(values)
+        )
+        db.commit()
+        foodRowsUpdated = result.rowcount
         if foodRowsUpdated == 0:
             raise HTTPException(status_code=404, detail="Food not found")
         
-        cur.execute('UPDATE foods SET "Vitamin K, total µg" = "Vitamin K (phylloquinone) µg" + "Vitamin K (Menaquinone-4) µg" + "Vitamin K (Menaquinone-7) µg" WHERE user_id = ?', (user_id,))
-        conn.commit()
+        db.execute(
+            text(
+                'UPDATE foods SET "Vitamin K, total µg" = "Vitamin K (phylloquinone) µg" + "Vitamin K (Menaquinone-4) µg" + "Vitamin K (Menaquinone-7) µg" WHERE user_id = :user_id'
+            ),
+            {"user_id": user_id},
+        )
+        db.commit()
         return {"updated": foodRowsUpdated}
 
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        conn.close()
 
 @app.delete("/api/foods/{fdc_id}")
-def delete_food(fdc_id: int, user: dict = Depends(verify_auth_token_get_user)):
+def delete_food(fdc_id: int, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
-    conn = None
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM foods WHERE fdc_id = ? AND user_id = ?", (fdc_id, user_id))
-        conn.commit()
-        if cur.rowcount == 0:
+        result = db.execute(
+            delete(Food).where(Food.fdc_id == fdc_id, Food.user_id == user_id)
+        )
+        db.commit()
+        if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Food not found")
-        return {"deleted": cur.rowcount}
+        return {"deleted": result.rowcount}
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 
 @app.post("/api/foods/create_update_food_from_fdcid/{fdcid}") 
-def create_update_food_from_fdcid(fdcid: int, request: Request, user: dict = Depends(verify_auth_token_get_user)):
+def create_update_food_from_fdcid(fdcid: int, request: Request, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
     #API Call to FDC to get food nutrition details
     httpx_client =  request.app.state.httpx_client
@@ -601,33 +578,22 @@ def create_update_food_from_fdcid(fdcid: int, request: Request, user: dict = Dep
     except Exception as e:
         handle_httpx_exception(e)
 
-    #Set DB Conn
-    conn = None
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        #Get the food record from local db first
-        cur.execute("SELECT * from foods where fdc_id = ? AND user_id = ?", (fdcid, user_id))
-        record = cur.fetchone()
+        record = db.execute(
+            select(Food).where(Food.fdc_id == fdcid, Food.user_id == user_id).limit(1)
+        ).scalar_one_or_none()
 
         #Create new record for the food if food doesn't exist in local DB
         if record is None:
             created = True
-            cur.execute(
-                "INSERT INTO foods ('user_id','fdc_id','Name','Serving Size','Unit') VALUES (?, ?, ?, ?, ?);",
-                (user_id, fdcid, foodname, 100, "grams"),
-            )
-            conn.commit()
+            db.add(Food(user_id=user_id, fdc_id=fdcid, name=foodname, serving_size=100, unit="grams"))
+            db.commit()
             print("New food inserted: " + foodname)
         else:
             created = False
 
         #Get all cols of food table
-        cur.execute("PRAGMA table_info(foods)")
-        cols = cur.fetchall()
-        table_cols = []
-        for col in cols:
-            table_cols.append(col[1].strip())
+        table_cols = {col.name for col in Food.__table__.columns}
 
         for nutrient in food['foodNutrients']:
 
@@ -641,65 +607,74 @@ def create_update_food_from_fdcid(fdcid: int, request: Request, user: dict = Dep
                 #create relevant nutrient column if the column doesn't exist
                 if matching_table_col_name not in table_cols:
                     safe_col = matching_table_col_name.replace('"', '""')
-                    cur.execute(
-                        'ALTER TABLE foods ADD "%s" REAL NOT NULL DEFAULT 0;' % safe_col
+                    logger.info("Starting ALTER TABLE foods ADD column: %s. Postgres is Locked", safe_col)
+                    db.execute(
+                        text(f'ALTER TABLE foods ADD "{safe_col}" NUMERIC(10, 3) NOT NULL DEFAULT 0.000')
                     )
-                    conn.commit()
-                    print(matching_table_col_name + " Col Created")
+                    db.commit()
+                    logger.info("Completed ALTER TABLE foods ADD column: %s. Postgres Lock Released", safe_col)
 
                 #Update all the "nutrient" column values in DB for the food
                 safe_col = matching_table_col_name.replace('"', '""')
-                cur.execute(
-                    'UPDATE foods SET "%s" = ? WHERE fdc_id = ? AND user_id = ?;' % safe_col,
-                    (nutrient['amount'], fdcid, user_id),
+                db.execute(
+                    text(f'UPDATE foods SET "{safe_col}" = :amount WHERE fdc_id = :fdc_id AND user_id = :user_id'),
+                    {"amount": nutrient["amount"], "fdc_id": fdcid, "user_id": user_id},
                 )
-                conn.commit()
+                db.commit()
         
         #do the total vitamin K calculation
-        cur.execute('UPDATE foods SET "Vitamin K, total µg" = "Vitamin K (phylloquinone) µg" + "Vitamin K (Menaquinone-4) µg" + "Vitamin K (Menaquinone-7) µg" WHERE fdc_id = ?', (fdcid,))
-        conn.commit()
-    finally:
-        if conn is not None:
-            conn.close()
+        db.execute(
+            text(
+                'UPDATE foods SET "Vitamin K, total µg" = "Vitamin K (phylloquinone) µg" + "Vitamin K (Menaquinone-4) µg" + "Vitamin K (Menaquinone-7) µg" WHERE fdc_id = :fdc_id'
+            ),
+            {"fdc_id": fdcid},
+        )
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
 
     return f"Food {fdcid} {foodname} {'created' if created else 'updated'}"
 
 
 
 @app.get("/api/diets/{diet_name}")
-def get_diets(diet_name: str = "*", user: dict = Depends(verify_auth_token_get_user)):
-    conn = None
+def get_diets(diet_name: str = "*", user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     try:
-        conn = get_db_conn()
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
         if diet_name == "*":
-            cur.execute("SELECT * FROM diets WHERE user_id = ?", (user["id"],))
+            rows = db.execute(
+                select(Diet).where(Diet.user_id == user["id"])
+            ).scalars().all()
         else:
-            cur.execute("SELECT * FROM diets WHERE diet_name = ? AND user_id = ?",(diet_name, user["id"]))
+            rows = db.execute(
+                select(Diet).where(Diet.diet_name == diet_name, Diet.user_id == user["id"])
+            ).scalars().all()
 
-        rows = cur.fetchall()
-        return strip_user_id([dict(row) for row in rows])
+        return strip_user_id([model_to_dict(row) for row in rows])
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 @app.get("/api/diets/{diet_name}/nutrition")
-def diets_nutrition(diet_name: str, user: dict = Depends(verify_auth_token_get_user)):
-    conn = None
+def diets_nutrition(diet_name: str, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     try:
-        conn = get_db_conn()
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT diets.* FROM diets WHERE diets.diet_name = ? AND user_id = ?", (diet_name, user["id"]))
-        diet_items = strip_user_id([dict(row) for row in cur.fetchall()])
+        diet_items = strip_user_id([
+            model_to_dict(row)
+            for row in db.execute(
+                select(Diet).where(Diet.diet_name == diet_name, Diet.user_id == user["id"])
+            ).scalars().all()
+        ])
 
-        cur.execute("SELECT * FROM foods WHERE user_id = ?", (user["id"],))
-        foods = strip_user_id([dict(row) for row in cur.fetchall()])
+        foods = strip_user_id([
+            model_to_dict(row)
+            for row in db.execute(
+                select(Food).where(Food.user_id == user["id"])
+            ).scalars().all()
+        ])
 
         foods_by_id = {}
         for food in foods:
@@ -738,208 +713,171 @@ def diets_nutrition(diet_name: str, user: dict = Depends(verify_auth_token_get_u
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 @app.get("/api/rda")
-def get_rda(user: dict = Depends(verify_auth_token_get_user)):
-    conn = None
+def get_rda(user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     try:
-        conn = get_db_conn()
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM RDA WHERE user_id = ?", (user["id"],))
-        rows = cur.fetchall()
-        return strip_user_id([dict(row) for row in rows])
+        rows = db.execute(
+            select(RDA).where(RDA.user_id == user["id"])
+        ).scalars().all()
+        return strip_user_id([model_to_dict(row) for row in rows])
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 @app.put("/api/rda/{id}")
-def update_rda(id: int, payload: RDAUpdate, user: dict = Depends(verify_auth_token_get_user)):
+def update_rda(id: int, payload: RDAUpdate, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
     value = float(payload.value)
 
-    conn = None
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute("SELECT nutrient FROM RDA WHERE id = ? AND user_id = ? LIMIT 1", (id, user_id))
-        row = cur.fetchone()
+        row = db.execute(
+            select(RDA).where(RDA.id == id, RDA.user_id == user_id).limit(1)
+        ).scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="RDA not found")
-        nutrient_name = str(row[0] or "").strip()
+        nutrient_name = str(row.nutrient or "").strip()
 
-        cur.execute(
-            "UPDATE RDA SET value = ? WHERE id = ? AND user_id = ?",
-            (value, id, user_id),
-        )
-        conn.commit()
+        row.value = value
+        db.commit()
         return JSONResponse({"detail": f"Updated RDA {nutrient_name}"}, status_code=200)
-    finally:
-        if conn is not None:
-            conn.close()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
 
 @app.get("/api/ul")
-def get_ul(user: dict = Depends(verify_auth_token_get_user)):
-    conn = None
+def get_ul(user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     try:
-        conn = get_db_conn()
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM UL WHERE user_id = ?", (user["id"],))
-        rows = cur.fetchall()
-        return strip_user_id([dict(row) for row in rows])
+        rows = db.execute(
+            select(UL).where(UL.user_id == user["id"])
+        ).scalars().all()
+        return strip_user_id([model_to_dict(row) for row in rows])
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 @app.put("/api/ul/{id}")
-def update_ul(id: int, payload: ULUpdate, user: dict = Depends(verify_auth_token_get_user)):
+def update_ul(id: int, payload: ULUpdate, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
     value = float(payload.value)
 
-    conn = None
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute("SELECT nutrient FROM UL WHERE id = ? AND user_id = ? LIMIT 1", (id, user_id))
-        row = cur.fetchone()
+        row = db.execute(
+            select(UL).where(UL.id == id, UL.user_id == user_id).limit(1)
+        ).scalar_one_or_none()
         if row is None:
             raise HTTPException(status_code=404, detail="UL not found")
-        nutrient_name = str(row[0] or "").strip()
+        nutrient_name = str(row.nutrient or "").strip()
 
-        cur.execute(
-            "UPDATE UL SET value = ? WHERE id = ? AND user_id = ?",
-            (value, id, user_id),
-        )
-        conn.commit()
+        row.value = value
+        db.commit()
         return JSONResponse({"detail": f"Updated UL {nutrient_name}"}, status_code=200)
-    finally:
-        if conn is not None:
-            conn.close()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc))
 
 @app.post("/api/diet")
-def create_diet(payload: DietCreate, user: dict = Depends(verify_auth_token_get_user)):
-    conn = None
+def create_diet(payload: DietCreate, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            INSERT INTO diets (user_id, diet_name, fdc_id, quantity, sort_order, color)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (user["id"], payload.diet_name, payload.fdc_id, payload.quantity, payload.sort_order, payload.color),
+        db.add(
+            Diet(
+                user_id=user["id"],
+                diet_name=payload.diet_name,
+                fdc_id=payload.fdc_id,
+                quantity=payload.quantity,
+                sort_order=payload.sort_order,
+                color=payload.color,
+            )
         )
-        conn.commit()
-        return {"created": cur.rowcount}
+        db.commit()
+        return {"created": 1}
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 @app.put("/api/diet")
-def update_diet(payload: DietUpdate, user: dict = Depends(verify_auth_token_get_user)):
-    conn = None
+def update_diet(payload: DietUpdate, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
         original_fdc_id = payload.original_fdc_id if payload.original_fdc_id is not None else payload.fdc_id
         original_quantity = payload.original_quantity if payload.original_quantity is not None else payload.quantity
         original_sort_order = payload.original_sort_order if payload.original_sort_order is not None else payload.sort_order
-        cur.execute(
-            """
-            UPDATE diets
-            SET diet_name = ?, fdc_id = ?, quantity = ?, sort_order = ?, color = ?
-            WHERE user_id = ? AND diet_name = ? AND fdc_id = ? AND quantity = ? AND sort_order = ?
-            """,
-            (
-                payload.diet_name,
-                payload.fdc_id,
-                payload.quantity,
-                payload.sort_order,
-                payload.color,
-                user["id"],
-                payload.diet_name,
-                original_fdc_id,
-                original_quantity,
-                original_sort_order,
-            ),
+        result = db.execute(
+            update(Diet)
+            .where(
+                Diet.user_id == user["id"],
+                Diet.diet_name == payload.diet_name,
+                Diet.fdc_id == original_fdc_id,
+                Diet.quantity == original_quantity,
+                Diet.sort_order == original_sort_order,
+            )
+            .values(
+                diet_name=payload.diet_name,
+                fdc_id=payload.fdc_id,
+                quantity=payload.quantity,
+                sort_order=payload.sort_order,
+                color=payload.color,
+            )
         )
-        conn.commit()
-        if cur.rowcount == 0:
+        db.commit()
+        if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Diet not found")
-        return {"updated": cur.rowcount}
+        return {"updated": result.rowcount}
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 @app.delete("/api/diet")
-def delete_diet(payload: DietDelete, user: dict = Depends(verify_auth_token_get_user)):
-    conn = None
+def delete_diet(payload: DietDelete, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
         if payload.delete_all:
-            cur.execute("DELETE FROM diets WHERE diet_name = ? AND user_id = ?", (payload.diet_name, user["id"]))
-        else:
-            cur.execute(
-                """
-                DELETE FROM diets
-                WHERE user_id = ? AND diet_name = ? AND fdc_id = ? AND quantity = ? AND sort_order = ?
-                """,
-                (user["id"], payload.diet_name, payload.fdc_id, payload.quantity, payload.sort_order),
+            result = db.execute(
+                delete(Diet).where(Diet.diet_name == payload.diet_name, Diet.user_id == user["id"])
             )
-        conn.commit()
-        if cur.rowcount == 0:
+        else:
+            result = db.execute(
+                delete(Diet).where(
+                    Diet.user_id == user["id"],
+                    Diet.diet_name == payload.diet_name,
+                    Diet.fdc_id == payload.fdc_id,
+                    Diet.quantity == payload.quantity,
+                    Diet.sort_order == payload.sort_order,
+                )
+            )
+        db.commit()
+        if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Diet item not found")
-        return {"deleted": cur.rowcount}
+        return {"deleted": result.rowcount}
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 @app.put("/api/diet/name_only")
-def update_diet_name_only(payload: DietNameUpdate, user: dict = Depends(verify_auth_token_get_user)):
-    conn = None
+def update_diet_name_only(payload: DietNameUpdate, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     try:
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE diets SET diet_name = ? WHERE diet_name = ? AND user_id = ?",
-            (payload.diet_name_new, payload.diet_name_old, user["id"]),
+        result = db.execute(
+            update(Diet)
+            .where(Diet.diet_name == payload.diet_name_old, Diet.user_id == user["id"])
+            .values(diet_name=payload.diet_name_new)
         )
-        conn.commit()
-        if cur.rowcount == 0:
+        db.commit()
+        if result.rowcount == 0:
             raise HTTPException(status_code=404, detail="Diet not found")
-        return {"updated": cur.rowcount}
+        return {"updated": result.rowcount}
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
 def handle_httpx_exception(e: Exception):
     if isinstance(e, httpx.HTTPStatusError):
