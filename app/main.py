@@ -37,17 +37,22 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    ''' Run at startup
+        Initialize the Client and add it to app.state
+    '''
     # One client + one connection pool for the whole app lifetime
     app.state.httpx_client = httpx.Client(
         timeout=10.0,
         limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
     )
-    try:
-        yield
-    finally:
-        app.state.httpx_client.close()
-        engine.dispose()
-        # os.kill(os.getpid(), signal.SIGINT)  # let the server manage shutdown cleanly
+    yield
+
+    ''' Run on shutdown
+        Close the connections
+    '''
+    app.state.httpx_client.close()
+    engine.dispose()
+    # os.kill(os.getpid(), signal.SIGINT)  # let the server manage shutdown cleanly
 
 app = FastAPI(lifespan=lifespan)
 
