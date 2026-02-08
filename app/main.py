@@ -210,7 +210,7 @@ def register_submit(
                 sql_blob = handle.read()
             statements = [stmt.strip() for stmt in sql_blob.split(";") if stmt.strip()]
             for stmt in statements:
-                stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
+                stmt = re.sub(r"(\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
                 db.execute(text(stmt))
 
         init_diets_path = os.path.join("app", "init_diets_data.sql")

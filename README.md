@@ -20,7 +20,7 @@ Start the server:
 Run below command in Git Bash or Linux Terminal to create the Database Tables. Replace the db_ops_pass value with what you set in .env file
    - `curl -X POST http://127.0.0.1:8000/api/admin/create_db_tables \
   -H "Content-Type: application/json" \
-  -d '{"db_ops_pass":"supersecretpassword"}'`
+  -d '{"db_ops_pass":"strongestpassword112"}'`
 
 Open the app in your browser, Create an account, and begin using it:
    - `http://127.0.0.1:8000`

@@ -233,6 +233,7 @@ class Food(Base):
     genistin_mg: Mapped[float] = mapped_column("Genistin mg", Numeric(10, 3), nullable=False, server_default=text("0.000"))
     glycitin_mg: Mapped[float] = mapped_column("Glycitin mg", Numeric(10, 3), nullable=False, server_default=text("0.000"))
     iodine_i_g: Mapped[float] = mapped_column("Iodine, I µg", Numeric(10, 3), nullable=False, server_default=text("0.000"))
+    chlorine_cl_mg: Mapped[float] = mapped_column("Chlorine, Cl mg", Numeric(10, 3), nullable=False, server_default=text("0.000"))
 
     user: Mapped["User"] = relationship(back_populates="foods")
 
