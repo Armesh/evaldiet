@@ -24,7 +24,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from app.models import *
 from app.db_routes import get_db_router
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, engine
 from app.db.models import User, Food, Diet, RDA, UL, DEFAULT_SETTINGS
 from sqlalchemy import select, update, delete, func, text
 from sqlalchemy import inspect as sa_inspect
@@ -46,7 +46,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         app.state.httpx_client.close()
-        os.kill(os.getpid(), signal.SIGINT)
+        engine.dispose()
+        # os.kill(os.getpid(), signal.SIGINT)  # let the server manage shutdown cleanly
 
 app = FastAPI(lifespan=lifespan)
 
@@ -200,8 +201,7 @@ def register_submit(
         hashed_password = hash_password(password)
         new_user = User(username=username, hashed_password=hashed_password)
         db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
+        db.flush()  # assign PK without committing so entire registration can roll back
         user_id = new_user.id
 
         init_foods_path = os.path.join("app", "init_foods_data.sql")
