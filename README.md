@@ -18,7 +18,7 @@ Start the server:
    - macOS/Linux: `./runapp.sh`
 
 Run below command in Git Bash or Linux Terminal to create the Database Tables. Replace the db_ops_pass value with what you set in .env file
-   - `curl -X POST http://127.0.0.1:8000/api/admin/create_db \
+   - `curl -X POST http://127.0.0.1:8000/api/admin/create_db_tables \
   -H "Content-Type: application/json" \
   -d '{"db_ops_pass":"supersecretpassword"}'`
 

@@ -33,7 +33,7 @@ def get_db_router():
             raise HTTPException(status_code=500, detail=str(exc))
     
     @router.post("/api/admin/create_db_tables")
-    def create_db(payload: DbOpsPassPayload):
+    def create_db_tables(payload: DbOpsPassPayload):
         verify_db_ops_pass(payload.db_ops_pass)
         try:
             logger = logging.getLogger(__name__)
@@ -42,9 +42,9 @@ def get_db_router():
             model_tables = set(Base.metadata.tables.keys())
             if model_tables and model_tables.issubset(existing_tables):
                 raise HTTPException(status_code=400, detail="Nothing was done. All Tables already present")
-            logger.info("create_db: starting Base.metadata.create_all")
+            logger.info("create_db_tables: starting Base.metadata.create_all")
             Base.metadata.create_all(bind=engine)
-            logger.info("create_db: finished Base.metadata.create_all")
+            logger.info("create_db_tables: finished Base.metadata.create_all")
         except HTTPException:
             raise
         except Exception as exc:
