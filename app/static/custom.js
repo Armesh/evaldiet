@@ -1606,10 +1606,44 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     let activeEditRow = null;
+    let pendingEditKey = null;
+
+    function buildEditKey(row) {
+        return {
+            dietName: String(row.dataset.dietName ?? dietName ?? ""),
+            fdcId: String(row.dataset.originalFdcId ?? ""),
+            quantity: String(row.dataset.originalQuantity ?? ""),
+            sortOrder: String(row.dataset.originalSortOrder ?? ""),
+        };
+    }
+
+    function restorePendingEditRow() {
+        if (!pendingEditKey) {
+            return;
+        }
+        const rows = Array.from(dietItemsBody.querySelectorAll("tr"));
+        const match = rows.find((row) => {
+            return (
+                String(row.dataset.dietName ?? dietName ?? "") === pendingEditKey.dietName &&
+                String(row.dataset.originalFdcId ?? "") === pendingEditKey.fdcId &&
+                String(row.dataset.originalQuantity ?? "") === pendingEditKey.quantity &&
+                String(row.dataset.originalSortOrder ?? "") === pendingEditKey.sortOrder
+            );
+        });
+        pendingEditKey = null;
+        if (match) {
+            setEditingRow(match);
+        }
+    }
 
     function setEditingRow(row) {
         if (activeEditRow && activeEditRow !== row) {
-            clearEditingRow({ commit: true, reload: false });
+            if (rowHasChanges(activeEditRow)) {
+                pendingEditKey = buildEditKey(row);
+                clearEditingRow({ commit: true, reload: true });
+                return;
+            }
+            clearEditingRow({ commit: false });
         }
         activeEditRow = row;
         row.classList.add("is-editing");
@@ -2438,6 +2472,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 updateSaveAllState();
                 updateDietHashDisplay();
                 dietItemsAdd.disabled = false;
+                restorePendingEditRow();
             })
             .catch((error) => {
                 dietItemsStatus.textContent = `Failed to load items: ${error.message}`;
