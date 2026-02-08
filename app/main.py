@@ -3,7 +3,6 @@ from random import random
 import string
 import traceback
 import logging
-import logging
 import os
 import base64
 import hashlib
@@ -17,6 +16,7 @@ import signal
 import random
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Response, requests, Form
+from fastapi.encoders import jsonable_encoder
 from fastapi.params import Body
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
@@ -27,6 +27,7 @@ from app.db_routes import get_db_router
 from app.db.session import SessionLocal
 from app.db.models import User, Food, Diet, RDA, UL, DEFAULT_SETTINGS
 from sqlalchemy import select, update, delete, func, text
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 import re
 
@@ -82,7 +83,12 @@ def strip_user_id(data):
     return data
 
 def model_to_dict(obj) -> dict:
-    return {col.name: getattr(obj, col.key) for col in obj.__table__.columns}
+    mapper = sa_inspect(obj).mapper
+    raw = {}
+    for attr in mapper.column_attrs:
+        col = attr.columns[0]
+        raw[col.name] = getattr(obj, attr.key)
+    return jsonable_encoder(raw)
 
 def get_db():
     db = SessionLocal()
