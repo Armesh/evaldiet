@@ -1,5 +1,7 @@
 import os
+import logging
 from fastapi import APIRouter, HTTPException
+from sqlalchemy import inspect
 from pydantic import BaseModel
 from sqlalchemy import text
 
@@ -30,16 +32,24 @@ def get_db_router():
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
     
-    @router.post("/api/admin/create_db")
+    @router.post("/api/admin/create_db_tables")
     def create_db(payload: DbOpsPassPayload):
         verify_db_ops_pass(payload.db_ops_pass)
         try:
+            logger = logging.getLogger(__name__)
+            inspector = inspect(engine)
+            existing_tables = set(inspector.get_table_names())
+            model_tables = set(Base.metadata.tables.keys())
+            if model_tables and model_tables.issubset(existing_tables):
+                raise HTTPException(status_code=400, detail="Nothing was done. All Tables already present")
+            logger.info("create_db: starting Base.metadata.create_all")
             Base.metadata.create_all(bind=engine)
+            logger.info("create_db: finished Base.metadata.create_all")
         except HTTPException:
             raise
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc))
 
-        return {"status": "ok", "message": "Database created with SQLAlchemy models"}
+        return {"status": "ok", "message": "Database Tables created with SQLAlchemy models"}
 
     return router

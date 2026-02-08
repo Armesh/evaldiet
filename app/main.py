@@ -3,6 +3,7 @@ from random import random
 import string
 import traceback
 import logging
+import logging
 import os
 import base64
 import hashlib
@@ -30,6 +31,7 @@ from sqlalchemy.orm import Session
 import re
 
 load_dotenv()  # loads .env from current working directory
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
