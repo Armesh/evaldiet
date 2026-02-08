@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
     '''
     app.state.httpx_client.close()
     engine.dispose()
-    # os.kill(os.getpid(), signal.SIGINT)  # let the server manage shutdown cleanly
+    # os.kill(os.getpid(), signal.SIGINT)  
 
 app = FastAPI(lifespan=lifespan)
 

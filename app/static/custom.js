@@ -1609,7 +1609,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function setEditingRow(row) {
         if (activeEditRow && activeEditRow !== row) {
-            clearEditingRow({ commit: true });
+            clearEditingRow({ commit: true, reload: false });
         }
         activeEditRow = row;
         row.classList.add("is-editing");
@@ -1618,7 +1618,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function clearEditingRow({ commit = false } = {}) {
+    function clearEditingRow({ commit = false, reload = true } = {}) {
         const row = activeEditRow;
         if (row) {
             row.classList.remove("is-editing");
@@ -1632,7 +1632,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 clearTimeout(autoSaveTimer);
                 autoSaveTimer = null;
             }
-            autoSaveDirtyRows();
+            autoSaveDirtyRows({ reload });
         }
     }
 
@@ -1776,7 +1776,21 @@ document.addEventListener("DOMContentLoaded", () => {
         };
     }
 
-    function saveDietRows(rows) {
+    function markRowsSaved(rows) {
+        rows.forEach((row) => {
+            const inputs = row.querySelectorAll("input[data-column]");
+            const current = {};
+            inputs.forEach((input) => {
+                current[input.dataset.column] = input.value;
+            });
+            row.dataset.originalFdcId = String(current.fdc_id ?? "");
+            row.dataset.originalQuantity = String(current.quantity ?? "");
+            row.dataset.originalSortOrder = String(current.sort_order ?? "");
+            row.dataset.originalColor = String(current.color ?? "");
+        });
+    }
+
+    function saveDietRows(rows, { reload = true } = {}) {
         if (!rows.length) {
             return Promise.resolve();
         }
@@ -1796,11 +1810,17 @@ document.addEventListener("DOMContentLoaded", () => {
             if (failed.length > 0) {
                 throw new Error(`Failed to save ${failed.length} row(s).`);
             }
+            if (!reload) {
+                markRowsSaved(rows);
+                updateSaveAllState();
+                updateDietHashDisplay();
+                return;
+            }
             return loadDietItems();
         });
     }
 
-    function autoSaveDirtyRows() {
+    function autoSaveDirtyRows({ reload = true } = {}) {
         const dirtyRows = collectDirtyRows();
         if (dirtyRows.length === 0) {
             return;
@@ -1810,7 +1830,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         saveInFlight = true;
-        saveDietRows(dirtyRows)
+        saveDietRows(dirtyRows, { reload })
             .then(() => {
                 showAutoSaveToast();
             })
@@ -1831,6 +1851,9 @@ document.addEventListener("DOMContentLoaded", () => {
         setSaveAllEnabled(false);
         dietItemsAdd.disabled = true;
         activeEditRow = null;
+        if (dietItemsTable) {
+            dietItemsTable.classList.remove("is-editing");
+        }
         return ensureFoodsLoaded()
             .then(() => loadRda())
             .then(() => loadUl())
