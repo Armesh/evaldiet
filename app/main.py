@@ -23,7 +23,7 @@ from fastapi.templating import Jinja2Templates
 
 from fastapi.staticfiles import StaticFiles
 from app.models import *
-from app.db_routes import get_db_router
+import app.db_routes as db_routes
 from app.db.session import SessionLocal, engine
 from app.db.models import User, Food, Diet, RDA, UL, DEFAULT_SETTINGS
 from sqlalchemy import select, update, delete, func, text
@@ -123,8 +123,7 @@ def verify_auth_token_get_user(request: Request, db: Session = Depends(get_db)) 
         headers={"Location": login_url},
     )
 
-app.include_router(get_db_router())
-
+app.include_router(db_routes.router)
 
 # serve /static/...
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -209,7 +208,7 @@ def register_submit(
         db.flush()  # assign PK without committing so entire registration can roll back
         user_id = new_user.id
 
-        init_foods_path = os.path.join("app", "init_foods_data.sql")
+        init_foods_path = os.path.join("app", "db", "init_foods_data.sql")
         if os.path.exists(init_foods_path):
             with open(init_foods_path, "r", encoding="utf-8") as handle:
                 sql_blob = handle.read()
@@ -218,7 +217,7 @@ def register_submit(
                 stmt = re.sub(r"(\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
                 db.execute(text(stmt))
 
-        init_diets_path = os.path.join("app", "init_diets_data.sql")
+        init_diets_path = os.path.join("app", "db", "init_diets_data.sql")
         if os.path.exists(init_diets_path):
             with open(init_diets_path, "r", encoding="utf-8") as handle:
                 sql_blob = handle.read()
@@ -227,7 +226,7 @@ def register_submit(
                 stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
                 db.execute(text(stmt))
 
-        init_rdas_path = os.path.join("app", "init_rdas_data.sql")
+        init_rdas_path = os.path.join("app", "db", "init_rdas_data.sql")
         if os.path.exists(init_rdas_path):
             with open(init_rdas_path, "r", encoding="utf-8") as handle:
                 sql_blob = handle.read()
@@ -236,7 +235,7 @@ def register_submit(
                 stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
                 db.execute(text(stmt))
 
-        init_ul_path = os.path.join("app", "init_ul_data.sql")
+        init_ul_path = os.path.join("app", "db", "init_ul_data.sql")
         if os.path.exists(init_ul_path):
             with open(init_ul_path, "r", encoding="utf-8") as handle:
                 sql_blob = handle.read()
