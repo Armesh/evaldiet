@@ -179,25 +179,24 @@ def register_submit(
     password: str = Form(...),
     captcha_code: str = Form(...),
     captcha_check: str | None = Form(None),
+    db: Session = Depends(get_db),
 ):
-    raise HTTPException(status_code=501, detail="register_submit not migrated to PostgreSQL yet")
-    conn = None
     try:
         reg_code = request.cookies.get("reg_code")
         if not reg_code or captcha_check is None or captcha_code.strip() != reg_code:
             raise HTTPException(status_code=400, detail="Captcha check failed")
-        conn = get_db_conn()
-        cur = conn.cursor()
-        cur.execute("SELECT 1 FROM users WHERE username = ? LIMIT 1", (username,))
-        if cur.fetchone() is not None:
+        existing = db.execute(
+            select(User.id).where(User.username == username).limit(1)
+        ).scalar_one_or_none()
+        if existing is not None:
             raise HTTPException(status_code=400, detail="Username already exists")
 
         hashed_password = hash_password(password)
-        cur.execute(
-            "INSERT INTO users (username, hashed_password, created_at) VALUES (?, ?, datetime('now'))",
-            (username, hashed_password),
-        )
-        user_id = cur.lastrowid
+        new_user = User(username=username, hashed_password=hashed_password)
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        user_id = new_user.id
 
         init_foods_path = os.path.join("app", "init_foods_data.sql")
         if os.path.exists(init_foods_path):
@@ -206,7 +205,7 @@ def register_submit(
             statements = [stmt.strip() for stmt in sql_blob.split(";") if stmt.strip()]
             for stmt in statements:
                 stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
-                cur.execute(stmt)
+                db.execute(text(stmt))
 
         init_diets_path = os.path.join("app", "init_diets_data.sql")
         if os.path.exists(init_diets_path):
@@ -215,7 +214,7 @@ def register_submit(
             statements = [stmt.strip() for stmt in sql_blob.split(";") if stmt.strip()]
             for stmt in statements:
                 stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
-                cur.execute(stmt)
+                db.execute(text(stmt))
 
         init_rdas_path = os.path.join("app", "init_rdas_data.sql")
         if os.path.exists(init_rdas_path):
@@ -224,7 +223,7 @@ def register_submit(
             statements = [stmt.strip() for stmt in sql_blob.split(";") if stmt.strip()]
             for stmt in statements:
                 stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
-                cur.execute(stmt)
+                db.execute(text(stmt))
 
         init_ul_path = os.path.join("app", "init_ul_data.sql")
         if os.path.exists(init_ul_path):
@@ -233,20 +232,17 @@ def register_submit(
             statements = [stmt.strip() for stmt in sql_blob.split(";") if stmt.strip()]
             for stmt in statements:
                 stmt = re.sub(r"(VALUES\s*\(\s*)xx(\s*,)", rf"\g<1>{user_id}\g<2>", stmt)
-                cur.execute(stmt)
+                db.execute(text(stmt))
 
-        conn.commit()
-        cur.execute("SELECT * FROM users WHERE id = ? LIMIT 1", (user_id,))
-        created_user = cur.fetchone()
+        db.commit()
     except HTTPException:
+        db.rollback()
         raise
     except Exception as exc:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(exc))
-    finally:
-        if conn is not None:
-            conn.close()
 
-    response = login_submit(request, username=username, password=password)
+    response = login_submit(request, username=username, password=password, db=db)
     response.delete_cookie(key="reg_code", path="/")
     return response
 
