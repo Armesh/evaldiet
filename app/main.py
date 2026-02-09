@@ -8,6 +8,8 @@ import base64
 import hashlib
 import hmac
 import time
+from collections import deque
+from threading import Lock
 import json
 
 import httpx
@@ -35,6 +37,21 @@ load_dotenv()  # loads .env from current working directory
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 FDC_API_KEY = os.getenv("FDC_API_KEY")
+
+FDC_RATE_LIMIT_WINDOW_SECS = 60
+FDC_RATE_LIMIT_MAX_CALLS = 1
+_fdc_calls_by_ip = {}
+_fdc_calls_lock = Lock()
+
+def enforce_fdc_rate_limit(ip: str):
+    now = time.time()
+    with _fdc_calls_lock:
+        q = _fdc_calls_by_ip.setdefault(ip, deque())
+        while q and (now - q[0]) > FDC_RATE_LIMIT_WINDOW_SECS:
+            q.popleft()
+        if len(q) >= FDC_RATE_LIMIT_MAX_CALLS:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded. Only 1 request per minute is allowed. Try later.")
+        q.append(now)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -574,6 +591,8 @@ def delete_food(fdc_id: int, user: dict = Depends(verify_auth_token_get_user), d
 @app.post("/api/foods/create_update_food_from_fdcid/{fdcid}") 
 def create_update_food_from_fdcid(fdcid: int, request: Request, user: dict = Depends(verify_auth_token_get_user), db: Session = Depends(get_db)):
     user_id = user["id"]
+    client_ip = request.client.host if request.client else "unknown"
+    enforce_fdc_rate_limit(client_ip)
     #API Call to FDC to get food nutrition details
     httpx_client =  request.app.state.httpx_client
     if not FDC_API_KEY:
