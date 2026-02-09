@@ -198,7 +198,12 @@ def register_page(request: Request):
 
 @app.get("/hashpassword/{password}")
 def test_hash(password: str):
-    return {"hash": hash_password(password)}
+    try:
+        return {"hash": hash_password(password)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 @app.post("/api/register")
 def register_submit(

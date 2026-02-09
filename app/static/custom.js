@@ -572,7 +572,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 method: "POST",
             }).then((response) => {
                 if (!response.ok) {
-                    throw new Error(`Request failed with ${response.status}`);
+                    const contentType = response.headers.get("content-type") || "";
+                    if (contentType.includes("application/json")) {
+                        return response.json().then((data) => {
+                            const detail = data?.detail || "Unknown error";
+                            throw new Error(`Request failed with ${response.status}: ${detail}`);
+                        });
+                    }
+                    return response.text().then((text) => {
+                        const detail = text || "Unknown error";
+                        throw new Error(`Request failed with ${response.status}: ${detail}`);
+                    });
                 }
                 return response.text();
             });
