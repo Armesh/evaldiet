@@ -52,11 +52,14 @@
                     <form id="foods-fdc-form" class="row gy-2 gx-3 align-items-end">
                       <div class="col-sm-12 col-lg-6">
                         <label class="form-label text-decoration-underline" for="foods-fdc-id">Add food by FDC ID</label>
-                        <p>Search any food, e.g chicken in this <a target="_blank" href="https://fdc.nal.usda.gov/food-search?type=Foundation&query=chicken">fdc.nal.usda.gov</a> example, then click on a result, you will see the FDC ID for the food in details. Input the FDC ID below then click <button class="btn btn-primary w-100" type="submit">Fetch & Add Food by FDC ID</button></p>
+                        <p>Search any food, e.g chicken in this <a target="_blank" href="https://fdc.nal.usda.gov/food-search?type=Foundation&query=chicken">fdc.nal.usda.gov</a> example, then click on a result, you will see the FDC ID for the food in details. Input the FDC ID below then click the blue button </p>
                         
                         <img src="{{ url_for('static', path='fdcid.JPG') }}" class="img-fluid mt-2 mb-3" style="max-width: 420px;" />
                         
-                        <input type="number" class="form-control" id="foods-fdc-id" placeholder="2727569" min="1" required />
+                        <div class="input-group">
+                          <input type="number" class="form-control" id="foods-fdc-id" placeholder="2727569" min="1" required />
+                          <button class="btn btn-primary" type="submit">Fetch & Add Food by FDC ID</button>
+                        </div>
                       </div>
                     </form>
                   </div>

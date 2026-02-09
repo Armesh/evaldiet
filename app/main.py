@@ -34,6 +34,7 @@ import re
 load_dotenv()  # loads .env from current working directory
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+FDC_API_KEY = os.getenv("FDC_API_KEY")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -116,11 +117,10 @@ def verify_auth_token_get_user(request: Request, db: Session = Depends(get_db)) 
         except Exception:
             pass
 
-    login_url = "/ui/login"
     raise HTTPException(
         status_code=307,
         detail="Unauthorized",
-        headers={"Location": login_url},
+        headers={"Location": "/ui/login"},
     )
 
 app.include_router(db_routes.router)
@@ -576,7 +576,9 @@ def create_update_food_from_fdcid(fdcid: int, request: Request, user: dict = Dep
     user_id = user["id"]
     #API Call to FDC to get food nutrition details
     httpx_client =  request.app.state.httpx_client
-    url = "https://api.nal.usda.gov/fdc/v1/food/" + str(fdcid) + "?api_key=8yYwQ5HS4ddjLaDMsKIkTH8xCUOgucZqrLgcJuSP"
+    if not FDC_API_KEY:
+        raise HTTPException(status_code=500, detail="FDC_API_KEY is not configured. Set it in .env file.")
+    url = "https://api.nal.usda.gov/fdc/v1/food/" + str(fdcid) + "?api_key=" + FDC_API_KEY
     try:
         resp = httpx_client.get(url)
         resp.raise_for_status()
