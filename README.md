@@ -28,6 +28,6 @@ Visit the app in your browser at url below
 Create an account, and begin analyzing your diets.
 
 Tutorial video:
-<iframe width="560" height="315" src="https://www.youtube.com/embed/qViczOMwgg8?si=BAqk0T_2-aQ2lumC" title="EvalDiet Tutorial" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+[![EvalDiet Tutorial](https://img.youtube.com/vi/qViczOMwgg8/hqdefault.jpg)](https://www.youtube.com/watch?v=qViczOMwgg8)
 
 Live Demo: [https://evaldiet.onrender.com/](https://evaldiet.onrender.com/)
