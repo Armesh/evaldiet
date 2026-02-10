@@ -1,3 +1,14 @@
+## Live Demo
+Live Demo: [https://evaldiet.onrender.com/](https://evaldiet.onrender.com/)
+
+### Tutorial Video
+Tutorial video: [https://www.youtube.com/watch?v=qViczOMwgg8](https://www.youtube.com/watch?v=qViczOMwgg8)
+
+[![EvalDiet Tutorial](https://img.youtube.com/vi/qViczOMwgg8/hqdefault.jpg)](https://www.youtube.com/watch?v=qViczOMwgg8)
+
+## Self Local hosting
+Clone this repo.
+
 Install uv on your operating system. https://docs.astral.sh/uv/getting-started/installation/
 
 Setup an empty PostgreSQL database.
@@ -27,8 +38,3 @@ Visit the app in your browser at url below
 
 Create an account, and begin analyzing your diets.
 
-Tutorial video: [https://www.youtube.com/watch?v=qViczOMwgg8](https://www.youtube.com/watch?v=qViczOMwgg8)
-
-[![EvalDiet Tutorial](https://img.youtube.com/vi/qViczOMwgg8/hqdefault.jpg)](https://www.youtube.com/watch?v=qViczOMwgg8)
-
-Live Demo: [https://evaldiet.onrender.com/](https://evaldiet.onrender.com/)
