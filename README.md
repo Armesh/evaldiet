@@ -13,6 +13,8 @@ Install uv on your operating system. https://docs.astral.sh/uv/getting-started/i
 
 Setup an empty PostgreSQL database.
 
+Go get a FoodData Central USDA API Key (FDC_API_KEY) at [https://fdc.nal.usda.gov/api-key-signup](https://fdc.nal.usda.gov/api-key-signup)
+
 Open Command Prompt or shell in this directory / project root.
 
 Run below command in project root folder to create the project python virtual environment & install project dependencies:
