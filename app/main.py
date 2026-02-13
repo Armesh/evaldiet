@@ -166,6 +166,11 @@ def root(request: Request, user: dict = Depends(verify_auth_token_get_user), db:
         return RedirectResponse(url=f"/ui/diets?diet_name={diet_name}")
     return RedirectResponse(url="/ui/foods")
 
+@app.get("/ui/test")
+def test(request: Request):
+    return templates.TemplateResponse("test.html", {"request": request})
+
+
 @app.get("/ui/login")
 def login_page(request: Request):
     try:
@@ -324,8 +329,12 @@ def logout(user: dict = Depends(verify_auth_token_get_user)):
 
 @app.get("/ui/diets")
 def diet_details(request: Request, diet_name: str, user: dict = Depends(verify_auth_token_get_user)):
+    return templates.TemplateResponse("dietsv2.html", {"request": request, "diet_name": diet_name})
+
+@app.get("/ui/diets_old")
+def diet_detailsv2(request: Request, diet_name: str, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("diets.html", {"request": request, "diet_name": diet_name})
-    
+
 @app.get("/ui/foods")
 def all_foods(request: Request, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("foods.html", {"request": request})
@@ -680,11 +689,11 @@ def get_diets(diet_name: str = "*", user: dict = Depends(verify_auth_token_get_u
     try:
         if diet_name == "*":
             rows = db.execute(
-                select(Diet).where(Diet.user_id == user["id"])
+                select(Diet).where(Diet.user_id == user["id"]).order_by(Diet.sort_order.asc())
             ).scalars().all()
         else:
             rows = db.execute(
-                select(Diet).where(Diet.diet_name == diet_name, Diet.user_id == user["id"])
+                select(Diet).where(Diet.diet_name == diet_name, Diet.user_id == user["id"]).order_by(Diet.sort_order.asc())
             ).scalars().all()
 
         return strip_user_id([model_to_dict(row) for row in rows])

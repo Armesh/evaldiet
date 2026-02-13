@@ -3,6 +3,35 @@ if (!localStorage.getItem("theme")) {
   localStorage.setItem("theme", "dark");
 }
 
+
+  function calculateDietNutrition(food, dietItem) {
+    const servingSizeRaw = food ? food["Serving Size"] : undefined;
+    let servingSize = Number(servingSizeRaw);
+    if (!Number.isFinite(servingSize)) {
+      servingSize = 0;
+    }
+
+    const adjustedFood = { ...(food || {}) };
+    delete adjustedFood["Serving Size"];
+
+    const quantity = Number(dietItem?.quantity ?? 0);
+    const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+
+    Object.entries(food || {}).forEach(([key, value]) => {
+      if (key === "fdc_id" || key === "Serving Size") {
+        return;
+      }
+      if (typeof value === "number" && Number.isFinite(value)) {
+        const adjustedValue = servingSize > 0
+          ? Math.round((value / servingSize) * safeQuantity * 100) / 100
+          : 0.0;
+        adjustedFood[key] = adjustedValue;
+      }
+    });
+
+    return { ...(dietItem || {}), ...adjustedFood };
+  }
+  
 function getCookie(name) {
   const value = `; ${document.cookie}`;
   const parts = value.split(`; ${name}=`);
@@ -41,6 +70,49 @@ function showMsgToast() {
         toast.classList.remove("is-visible");
     }, 1600);
 }
+
+function toRgba(color, alpha) {
+    if (typeof color !== "string" || !color.trim()) return "";
+    const hexMatch = color.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+        const hex = hexMatch[1].length === 3
+            ? hexMatch[1].split("").map((c) => c + c).join("")
+            : hexMatch[1];
+        const r = parseInt(hex.slice(0, 2), 16);
+        const g = parseInt(hex.slice(2, 4), 16);
+        const b = parseInt(hex.slice(4, 6), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+    return color;
+}
+
+function cacheFoods(force = false) {
+    const cachedFoods = localStorage.getItem("foods");
+    if (!force && cachedFoods) return;
+    return fetch("/api/foods", { credentials: "same-origin" })
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error(`Request failed with ${response.status}`);
+            }
+            return response.json();
+        })
+        .then((foods) => {
+            const list = Array.isArray(foods) ? foods : [];
+            const keyed = {};
+            list.forEach((food) => {
+                if (food && food.fdc_id != null) {
+                    keyed[food.fdc_id] = food;
+                }
+            });
+            localStorage.setItem("foods", JSON.stringify(keyed));
+            console.log('Done localStorage.setItem("foods")');
+        })
+        .catch(() => {
+            // Ignore cache errors; foods are loaded on-demand elsewhere.
+        });
+}
+
+cacheFoods();
 
 document.addEventListener("DOMContentLoaded", () => {
     const DIET_COLOR_SWATCHES_DARK = ["#971d1f", "#ad5322", "#af882e", "#538d28", "#2b8066", "#375875"];
@@ -88,6 +160,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         sync_toggle_button_html_with_theme(); //Sync theme toggle button in sidebar upon page load
     }
+
+    const logoutForm = document.getElementById("logout-form");
+    logoutForm.addEventListener("submit", () => {
+        localStorage.removeItem("foods");
+    });
+
 
     function setActiveNavLinks() {
         const currentPath = normalizePath(window.location.pathname);
@@ -497,6 +575,9 @@ document.addEventListener("DOMContentLoaded", () => {
             })
             .then(() => {
                 alert(`Deleted food ${id}${foodName ? ` (${foodName})` : ""}.`);
+                return cacheFoods(true);
+            })
+            .then(() => {
                 window.location.reload();
             })
             .catch((error) => {
@@ -528,10 +609,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 const fdcId = data?.fdc_id;
                 if (fdcId != null) {
                     alert(`Created food ${fdcId} (${name}).`);
-                    window.location.href = `/ui/foods/edit/${encodeURIComponent(fdcId)}`;
-                    return;
+                    return cacheFoods(true).then(() => {
+                        window.location.href = `/ui/foods/edit/${encodeURIComponent(fdcId)}`;
+                    });
                 }
-                window.location.reload();
+                return cacheFoods(true).then(() => {
+                    window.location.reload();
+                });
             })
             .catch((error) => {
                 alert(`Failed to create food: ${error.message}`);
@@ -545,15 +629,14 @@ document.addEventListener("DOMContentLoaded", () => {
         loadFoods();
     }
 
-    if (foodsCreateBtn && !foodsCreateBtn._createHandlerAttached) {
+    if (foodsCreateBtn) {
         foodsCreateBtn.addEventListener("click", () => {
             createFoodWithDatetime();
         });
-        foodsCreateBtn._createHandlerAttached = true;
     }
 
     const foodsTable = document.getElementById("foods-table");
-    if (foodsTable && !foodsTable._deleteHandlerAttached) {
+    if (foodsTable) {
         foodsTable.addEventListener("click", (event) => {
             const target = event.target?.closest?.("button.btn.btn-outline-danger.btn-sm");
             if (!target || !foodsTable.contains(target)) {
@@ -561,7 +644,6 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             deleteFood(target.dataset.fdcId || "", target.dataset.foodName || "");
         });
-        foodsTable._deleteHandlerAttached = true;
     }
 
     let settingsReady = null;
@@ -600,6 +682,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 .then((response) => {
                     alert(response);
                     foodsFdcInput.value = "";
+                    return cacheFoods(true);
+                })
+                .then(() => {
                     window.location.reload();
                 })
                 .catch((error) => {
@@ -758,6 +843,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     })
                     .then(() => {
                         alert("Food update was successful.");
+                        cacheFoods(true);
                         foodsEditOriginal = new Map();
                         inputs.forEach((input) => {
                             const field = input.dataset.field;
@@ -1288,47 +1374,44 @@ document.addEventListener("DOMContentLoaded", () => {
                 statusEl.textContent = `Failed to load ${label} values: ${error.message}`;
             });
 
-        if (!tableEl._nutrientHandlerAttached) {
-            tableEl.addEventListener("change", (event) => {
-                const input = event.target?.closest?.("input.nutrient-value-input");
-                if (!input || !tableEl.contains(input)) {
-                    return;
-                }
-                const id = String(input.dataset.id || "").trim();
-                const nutrient = String(input.dataset.nutrient || "").trim();
-                const value = Number(input.value);
-                if (!id) {
-                    statusEl.textContent = `${label} update failed: missing id.`;
-                    return;
-                }
-                if (!Number.isFinite(value)) {
-                    statusEl.textContent = `${label} update failed: invalid value.`;
-                    return;
-                }
-                statusEl.textContent = "Saving...";
-                fetch(`${endpoint}/${encodeURIComponent(id)}`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "same-origin",
-                    body: JSON.stringify({ value, nutrient }),
+        tableEl.addEventListener("change", (event) => {
+            const input = event.target?.closest?.("input.nutrient-value-input");
+            if (!input || !tableEl.contains(input)) {
+                return;
+            }
+            const id = String(input.dataset.id || "").trim();
+            const nutrient = String(input.dataset.nutrient || "").trim();
+            const value = Number(input.value);
+            if (!id) {
+                statusEl.textContent = `${label} update failed: missing id.`;
+                return;
+            }
+            if (!Number.isFinite(value)) {
+                statusEl.textContent = `${label} update failed: invalid value.`;
+                return;
+            }
+            statusEl.textContent = "Saving...";
+            fetch(`${endpoint}/${encodeURIComponent(id)}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
+                body: JSON.stringify({ value, nutrient }),
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`Request failed with ${response.status}`);
+                    }
+                    return response.json();
                 })
-                    .then((response) => {
-                        if (!response.ok) {
-                            throw new Error(`Request failed with ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then((result) => {
-                        const name = result?.nutrient || nutrient || "item";
-                        statusEl.textContent = `${label} updated: ${name}.`;
-                        showMsgToast();
-                    })
-                    .catch((error) => {
-                        statusEl.textContent = `${label} update failed: ${error.message}`;
-                    });
-            });
-            tableEl._nutrientHandlerAttached = true;
-        }
+                .then((result) => {
+                    const name = result?.nutrient || nutrient || "item";
+                    statusEl.textContent = `${label} updated: ${name}.`;
+                    showMsgToast();
+                })
+                .catch((error) => {
+                    statusEl.textContent = `${label} update failed: ${error.message}`;
+                });
+        });
     }
 
     if (rdaTable || ulTable) {
