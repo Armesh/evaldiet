@@ -6,23 +6,23 @@
           [x-cloak] {
             display: none;
           }
-          #dietv2-items-head .is-hidden-col,
-          #dietv2-items-body .is-hidden-col {
+          #diet-items-head .is-hidden-col,
+          #diet-items-body .is-hidden-col {
             display: none;
           }
-          #dietv2-items-body .color-swatch {
+          #diet-items-body .color-swatch {
             width: 18px;
             height: 18px;
             border-radius: 50%;
             border: 1px solid rgba(0, 0, 0, 0.2);
             display: inline-block;
           }
-          #dietv2-items-body .color-dropdown {
+          #diet-items-body .color-dropdown {
             position: relative;
             display: inline-flex;
             align-items: center;
           }
-          #dietv2-items-body .color-menu {
+          #diet-items-body .color-menu {
             position: absolute;
             top: calc(100% + 0.25rem);
             left: 0;
@@ -36,18 +36,18 @@
             border-radius: 0.4rem;
             box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
           }
-          #dietv2-items-body .color-dropdown.is-open .color-menu {
+          #diet-items-body .color-dropdown.is-open .color-menu {
             display: grid;
           }
-          #dietv2-items-body .color-swatch.is-selected {
+          #diet-items-body .color-swatch.is-selected {
             outline: 1px solid var(--bs-body-color);
           }
-          #dietv2-items-body .food-picker {
+          #diet-items-body .food-picker {
             position: relative;
             z-index: 50;
           }
 
-          #dietv2-items-table th.name-col, #dietv2-items-table td.name-col {
+          #diet-items-table th.name-col, #diet-items-table td.name-col {
             width: 200px;
             min-width: 200px;
             /* position: sticky;
@@ -55,7 +55,7 @@
             z-index: 2; */
           }
 
-          #dietv2-items-body .food-options {
+          #diet-items-body .food-options {
             position: absolute;
             top: 100%;
             left: 0;
@@ -68,7 +68,7 @@
             border-radius: 0.25rem;
             min-width: 260px;
           }
-          #dietv2-items-body .food-option {
+          #diet-items-body .food-option {
             padding: 0.25rem 0.5rem;
             cursor: pointer;
             white-space: nowrap;
@@ -76,40 +76,40 @@
             text-overflow: ellipsis;
             min-width: 260px;
           }
-          #dietv2-items-body .food-option:hover {
+          #diet-items-body .food-option:hover {
             background: var(--bs-secondary-bg);
           }
-          #dietv2-items-body tr > td {
+          #diet-items-body tr > td {
             background-color: inherit;
           }
-          #dietv2-items-table th.name-col,
-          #dietv2-items-table td.name-col,
-          #dietv2-items-table th.quantity-col,
-          #dietv2-items-table td.quantity-col {
+          #diet-items-table th.name-col,
+          #diet-items-table td.name-col,
+          #diet-items-table th.quantity-col,
+          #diet-items-table td.quantity-col {
             overflow: visible;
           }
-          #dietv2-items-body td.name-col.is-open,
-          #dietv2-items-body td.quantity-col.is-open {
+          #diet-items-body td.name-col.is-open,
+          #diet-items-body td.quantity-col.is-open {
             z-index: 200;
           }
 
-          #dietv2-items-body .totals-row .totals-highlight {
+          #diet-items-body .totals-row .totals-highlight {
             font-weight: 600;
           }
-          #dietv2-items-body .totals-row .totals-protein {
+          #diet-items-body .totals-row .totals-protein {
             background-color: var(--food-dominant-protein);
             font-weight: 600;
           }
-          #dietv2-items-body .totals-row .totals-carb {
+          #diet-items-body .totals-row .totals-carb {
             background-color: var(--food-dominant-carb);
             font-weight: 600;
           }
-          #dietv2-items-body .totals-row .totals-fat {
+          #diet-items-body .totals-row .totals-fat {
             background-color: var(--food-dominant-fat);
             font-weight: 600;
           }
 
-          .dietv2-name-editor .dietv2-name-input {
+          .diet-name-editor .diet-name-input {
             max-width: 360px;
           }
 
@@ -117,16 +117,16 @@
             overflow: visible !important;
           }
 
-          #dietv2-items-table {
+          #diet-items-table {
             table-layout: fixed;
             min-width: 2800px;
           }
 
-          #dietv2-items-table #dietv2-items-body tr {
+          #diet-items-table #diet-items-body tr {
             background-color: var(--bs-body-bg)
           }
 
-          #dietv2-items-table th.name-col, #dietv2-items-table td.name-col {
+          #diet-items-table th.name-col, #diet-items-table td.name-col {
             width: 200px;
             min-width: 200px;
             position: sticky;
@@ -134,7 +134,7 @@
             z-index: 2;
           }
 
-          #dietv2-items-table th.quantity-col, #dietv2-items-table td.quantity-col {
+          #diet-items-table th.quantity-col, #diet-items-table td.quantity-col {
             width: 80px;
             min-width: 80px;
             position: sticky;
@@ -149,21 +149,25 @@
             <!--begin::Row-->
             <div class="row">
               <div class="col-sm-6">
-                <div class="dietv2-name-editor" id="dietv2-name-editor" x-data>
+                <div class="diet-name-editor" id="diet-name-editor" x-data="dietNameEditor()">
                   <h3
-                    class="mb-0 dietv2-name-display"
-                    id="dietv2-name-heading"
-                    x-show="!$store.diet.isEditing"
+                    class="mb-0 diet-name-display"
+                    id="diet-name-heading"
+                    x-show="!isEditing"
+                    x-text="diet_name"
+                    x-on:click="isEditing = true"
                   >
-                    {{ diet_name }}
+                    
                   </h3>
                   <input
-                    class="form-control form-control-sm dietv2-name-input"
-                    id="dietv2-name-input"
+                    class="form-control form-control-sm diet-name-input"
+                    id="diet-name-input"
                     type="text"
                     value="{{ diet_name }}"
-                    aria-label="dietv2 name"
-                    x-show="$store.diet.isEditing"
+                    aria-label="diet name"
+                    x-show="isEditing"
+                    x-model="diet_name"
+                    x-on:blur="saveDietName()"
                   />
                 </div>
               </div>
@@ -183,32 +187,32 @@
                 <div class="card">
                   <div class="card-body">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-                      <button id="dietv2-items-add" type="button" class="btn btn-outline-primary btn-sm">
+                      <button id="diet-items-add" type="button" class="btn btn-outline-primary btn-sm">
                         Add Item
                       </button>
-                      <button id="dietv2-items-save-all" type="button" class="btn btn-success btn-sm d-none">
+                      <button id="diet-items-save-all" type="button" class="btn btn-success btn-sm d-none">
                         Save All
                       </button>
-                      <div id="dietv2-items-status" class="text-muted small"></div>
-                      <div id="dietv2-items-hash" class="text-muted small"></div>
+                      <div id="diet-items-status" class="text-muted small"></div>
+                      <div id="diet-items-hash" class="text-muted small"></div>
                       <div class="flex-grow-1"></div>
-                      <button id="dietv2-items-clone" type="button" class="btn btn-outline-success btn-sm">
-                        Clone dietv2
+                      <button id="diet-items-clone" type="button" class="btn btn-outline-success btn-sm">
+                        Clone diet
                       </button>
-                      <button id="dietv2-items-delete-all" type="button" class="btn btn-outline-danger btn-sm">
+                      <button id="diet-items-delete-all" type="button" class="btn btn-outline-danger btn-sm">
                         Delete All
                       </button>
                     </div>
                     <div class="table-responsive">
                       <table
                         class="table table-sm table-bordered align-middle mb-0"
-                        id="dietv2-items-table"
+                        id="diet-items-table"
                         x-data
                         @click.outside="$store.diet.stopEdit($event)"
                         @keydown.enter.prevent="$store.diet.stopEdit()"
                         @keydown.escape.prevent="$store.diet.stopEdit()"
                       >
-                        <thead id="dietv2-items-head">
+                        <thead id="diet-items-head">
                           <tr>
                             <th x-show="$store.diet.isEditing"></th>
                             <template x-for="col in $store.diet.columns" :key="col">
@@ -224,7 +228,7 @@
                             </template>
                           </tr>
                         </thead>
-                        <tbody id="dietv2-items-body" x-init="$store.diet.initSortable($el)">
+                        <tbody id="diet-items-body" x-init="$store.diet.initSortable($el)">
                           <template x-for="row in $store.diet.dietItemNutritionList" :key="row._rowKey">
                             <tr :style="$store.diet.rowStyle(row)" :data-row-key="row._rowKey">
                               <td x-show="$store.diet.isEditing">
@@ -370,6 +374,56 @@
 
 <script>
     document.addEventListener('alpine:init', () => {
+
+        Alpine.data('dietNameEditor', () => ({
+            diet_name: "{{ diet_name }}",
+            isEditing: false,
+            saveDietName() {
+              const dietStore = Alpine.store('diet');
+              const newName = (this.diet_name || "").trim();
+              if (!newName || newName === dietStore.dietName) {
+                this.diet_name = dietStore.dietName || this.diet_name;
+                this.isEditing = false;
+                return;
+              }
+              const status = document.getElementById("diet-items-status");
+              if (status) status.textContent = "Saving diet name...";
+              fetch("/api/diet/name_only", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  diet_name_old: dietStore.dietName,
+                  diet_name_new: newName
+                })
+              })
+                .then((response) => {
+                  if (!response.ok) {
+                    throw new Error(`Request failed with ${response.status}`);
+                  }
+                  dietStore.dietName = newName;
+                  dietStore.dietItemNutritionList = dietStore.dietItemNutritionList.map((item) => ({
+                    ...item,
+                    diet_name: newName
+                  }));
+                  const params = new URLSearchParams(window.location.search);
+                  params.set("diet_name", newName);
+                  const newUrl = `${window.location.pathname}?${params.toString()}`;
+                  window.history.replaceState({}, "", newUrl);
+                  loadDietSidebar();
+                })
+                .catch((error) => {
+                  if (status) {
+                    status.textContent = `Failed to save diet name: ${error.message}`;
+                  }
+                  this.diet_name = dietStore.dietName;
+                })
+                .finally(() => {
+                  this.isEditing = false;
+                  if (status) status.textContent = "";
+                });
+            }
+        }));
+
         Alpine.store('diet', {
             dietItemNutritionList: [],
             columns: [],
@@ -566,10 +620,7 @@
                 };
               }
             },
-            stopEdit(event = null) {
-              if (event?.target && event.target.closest("#dietv2-name-editor")) {
-                return;
-              }
+            stopEdit() {
               this.isEditing = false;
               this.editingKey = null;
               this.colorMenuKey = null;
@@ -826,7 +877,7 @@
             },
             cloneDiet() {
               if (!this.dietName) {
-                const status = document.getElementById("dietv2-items-status");
+                const status = document.getElementById("diet-items-status");
                 if (status) status.textContent = "Missing diet name for cloning.";
                 return;
               }
@@ -838,8 +889,8 @@
                 color: item.color ?? null
               }));
               const cloneName = itemsToClone[0]?.diet_name;
-              const status = document.getElementById("dietv2-items-status");
-              const cloneBtn = document.getElementById("dietv2-items-clone");
+              const status = document.getElementById("diet-items-status");
+              const cloneBtn = document.getElementById("diet-items-clone");
               if (itemsToClone.length === 0) {
                 if (status) status.textContent = `No items to clone from ${this.dietName}.`;
                 return;
@@ -874,8 +925,8 @@
               if (!confirm(`Delete all items for ${this.dietName}? This cannot be undone.`)) {
                 return;
               }
-              const status = document.getElementById("dietv2-items-status");
-              const deleteBtn = document.getElementById("dietv2-items-delete-all");
+              const status = document.getElementById("diet-items-status");
+              const deleteBtn = document.getElementById("diet-items-delete-all");
               if (deleteBtn) deleteBtn.disabled = true;
               if (status) status.textContent = "Deleting all items...";
               fetch("/api/diet", {
@@ -1008,8 +1059,6 @@
     }
     return map;
   }
-
-  console.log(dietItems);
   
   // Calculate nutrition for each diet item
   dietItems.forEach(item => {
@@ -1040,104 +1089,27 @@
   }
   dietStore.dietName = dietName || "";
 
-  const addButton = document.getElementById("dietv2-items-add");
+  const addButton = document.getElementById("diet-items-add");
   if (addButton) {
     addButton.addEventListener("click", () => {
       dietStore.addItem({ dietName });
     });
   }
 
-  const cloneButton = document.getElementById("dietv2-items-clone");
+  const cloneButton = document.getElementById("diet-items-clone");
   if (cloneButton) {
     cloneButton.addEventListener("click", () => {
       dietStore.cloneDiet();
     });
   }
 
-  const deleteAllButton = document.getElementById("dietv2-items-delete-all");
+  const deleteAllButton = document.getElementById("diet-items-delete-all");
   if (deleteAllButton) {
     deleteAllButton.addEventListener("click", () => {
       dietStore.deleteAllDietItems();
     });
   }
 
-  const dietNameInput = document.getElementById("dietv2-name-input");
-  const dietNameHeading = document.getElementById("dietv2-name-heading");
-  const dietNameEditor = document.getElementById("dietv2-name-editor");
-  const dietItemsStatus = document.getElementById("dietv2-items-status");
-  if (dietNameInput && dietNameHeading && dietNameEditor) {
-      function syncDietNameDisplay(name) {
-        dietNameHeading.textContent = name;
-        dietNameInput.value = name;
-      }
-
-      dietNameHeading.addEventListener("click", () => {
-        dietStore.isEditing = true;
-        dietNameInput.focus();
-        dietNameInput.select();
-      });
-
-    dietNameInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        dietNameInput.blur();
-      } else if (event.key === "Escape") {
-          syncDietNameDisplay(dietStore.dietName);
-          dietStore.isEditing = false;
-        }
-      });
-
-      dietNameInput.addEventListener("blur", () => {
-        const newName = dietNameInput.value.trim();
-        if (!newName) {
-          syncDietNameDisplay(dietStore.dietName);
-          dietStore.isEditing = false;
-          return;
-        }
-        if (newName === dietStore.dietName) {
-          dietStore.isEditing = false;
-          return;
-        }
-
-      const payload = {
-        diet_name_old: dietStore.dietName,
-        diet_name_new: newName
-      };
-      if (dietItemsStatus) {
-        dietItemsStatus.textContent = "Saving diet name...";
-      }
-      fetch("/api/diet/name_only", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      })
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error(`Request failed with ${response.status}`);
-          }
-          dietStore.dietName = newName;
-          dietStore.dietItemNutritionList = dietStore.dietItemNutritionList.map((item) => ({
-            ...item,
-            diet_name: newName
-          }));
-          syncDietNameDisplay(newName);
-          params.set("diet_name", newName);
-          const newUrl = `${window.location.pathname}?${params.toString()}`;
-          window.history.replaceState({}, "", newUrl);
-        })
-        .catch((error) => {
-          if (dietItemsStatus) {
-            dietItemsStatus.textContent = `Failed to save diet name: ${error.message}`;
-          }
-          syncDietNameDisplay(dietStore.dietName);
-        })
-          .finally(() => {
-            dietStore.isEditing = false;
-            if (dietItemsStatus) {
-              dietItemsStatus.textContent = "";
-            }
-        });
-    });
-  }
 
 </script>
 

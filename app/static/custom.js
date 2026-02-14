@@ -4,7 +4,7 @@ if (!localStorage.getItem("theme")) {
 }
 
 
-  window.calculateDietNutrition = function calculateDietNutrition(food, dietItem) {
+  function calculateDietNutrition(food, dietItem) {
     const servingSizeRaw = food ? food["Serving Size"] : undefined;
     let servingSize = Number(servingSizeRaw);
     if (!Number.isFinite(servingSize)) {
@@ -291,6 +291,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     loadDietSidebar();
+    window.loadDietSidebar = loadDietSidebar;
 
     if (sidebarAddDietItem) {
         sidebarAddDietItem.addEventListener("click", () => {
@@ -877,7 +878,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const dietRdaThresholdKey = "diet_rda_threshold";
     const dietUlThresholdKey = "diet_ul_threshold";
     const dietHideRdaUlValuesKey = "diet_hide_rda_ul_values";
-    const requiredDietColumns = ["diet_name", "fdc_id", "quantity", "sort_order", "color"];
+    const requiredDietColumns = ["diet_name", "fdc_id", "quantity", "sort_order", "color", "Name"];
     const excludedDietColumns = ["Serving Size"];
 
     function normalizeSettings(settings) {
