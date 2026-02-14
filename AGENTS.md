@@ -23,6 +23,7 @@ It is a FastAPI application that serves Jinja2 templates with full page loads an
 - Keep existing AdminLTE/Bootstrap markup.
 - Avoid adding new dependencies.
 - Keep changes simple and readable; prefer plain JS.
+- Avoid unnecessary defensive guards in JS (e.g., checking `document.body` before use) unless there’s a concrete risk.
 
 ## Notes for Codex
 - If you touch column-selection logic, keep required columns forced into storage and not user-toggleable in the settings UI.

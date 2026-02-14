@@ -4,11 +4,11 @@ if (!localStorage.getItem("theme")) {
 }
 
 
-  function calculateDietNutrition(food, dietItem) {
+function calculateDietNutrition(food, dietItem) {
     const servingSizeRaw = food ? food["Serving Size"] : undefined;
     let servingSize = Number(servingSizeRaw);
     if (!Number.isFinite(servingSize)) {
-      servingSize = 0;
+        servingSize = 0;
     }
 
     const adjustedFood = { ...(food || {}) };
@@ -18,19 +18,19 @@ if (!localStorage.getItem("theme")) {
     const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
 
     Object.entries(food || {}).forEach(([key, value]) => {
-      if (key === "fdc_id" || key === "Serving Size") {
+        if (key === "fdc_id" || key === "Serving Size") {
         return;
-      }
-      if (typeof value === "number" && Number.isFinite(value)) {
+        }
+        if (typeof value === "number" && Number.isFinite(value)) {
         const adjustedValue = servingSize > 0
-          ? Math.round((value / servingSize) * safeQuantity * 100) / 100
-          : 0.0;
+            ? Math.round((value / servingSize) * safeQuantity * 100) / 100
+            : 0.0;
         adjustedFood[key] = adjustedValue;
-      }
+        }
     });
 
     return { ...(dietItem || {}), ...adjustedFood };
-  }
+}
   
 function getCookie(name) {
   const value = `; ${document.cookie}`;
@@ -84,6 +84,68 @@ function toRgba(color, alpha) {
         return `rgba(${r}, ${g}, ${b}, ${alpha})`;
     }
     return color;
+}
+
+function loadDietSidebar() {
+    const loadingItem = document.getElementById("diet-nav-loading");
+    const template = document.getElementById("diet-nav-item-template");
+    const parent = loadingItem?.parentElement || document.getElementById("navigation");
+    if (!loadingItem || !template?.content || !parent) {
+        return;
+    }
+    loadingItem.style.display = "";
+    const loadingLabel = loadingItem.querySelector("p");
+    if (loadingLabel) {
+        loadingLabel.textContent = "Loading...";
+    }
+    fetch("/api/diets/*")
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error(`Request failed with ${response.status}`);
+            }
+            return response.json();
+        })
+        .then((diets) => {
+            const dietNames = new Set();
+            if (Array.isArray(diets)) {
+                diets.forEach((diet) => {
+                    if (diet?.diet_name) {
+                        dietNames.add(String(diet.diet_name));
+                    }
+                });
+            }
+
+            if (dietNames.size === 0) {
+                const emptyLabel = loadingItem.querySelector("p");
+                if (emptyLabel) {
+                    emptyLabel.textContent = "No diets found.";
+                }
+                return;
+            }
+            
+
+            const sortedNames = Array.from(dietNames).sort((a, b) => a.localeCompare(b));
+            
+            parent.querySelectorAll("[data-diet-link='true']").forEach((node) => node.remove());
+            sortedNames.forEach((name) => {
+                const item = template.content.firstElementChild.cloneNode(true);
+                const link = item.querySelector("a");
+                const label = item.querySelector("p");
+                link.href = `/ui/diets?diet_name=${encodeURIComponent(name)}`;
+                label.textContent = name;
+                link.setAttribute("data-diet-link", "true");
+                parent.insertBefore(item, loadingItem);
+                console.log(name);
+            });
+            loadingItem.style.display = "none";
+            window.setActiveNavLinks();
+        })
+        .catch(() => {
+            const errorLabel = loadingItem.querySelector("p");
+            if (errorLabel) {
+                errorLabel.textContent = "Failed to load diets.";
+            }
+        });
 }
 
 function cacheFoods(force = false) {
@@ -170,7 +232,7 @@ document.addEventListener("DOMContentLoaded", () => {
     function setActiveNavLinks() {
         const currentPath = normalizePath(window.location.pathname);
         const currentParams = new URLSearchParams(window.location.search);
-        const currentDietName = currentParams.get("diet_name");
+        const currentDietName = normalizeDietName(currentParams.get("diet_name"));
 
         document.querySelectorAll("a[href]").forEach((link) => {
             link.classList.remove("active");
@@ -194,7 +256,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             let isActive = isExact || isPrefix;
             if (linkPath === "/ui/diets") {
-                const linkDietName = linkUrl.searchParams.get("diet_name");
+                const linkDietName = normalizeDietName(linkUrl.searchParams.get("diet_name"));
                 if (currentDietName) {
                     isActive = linkDietName === currentDietName;
                 } else {
@@ -217,6 +279,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     setActiveNavLinks();
+    window.setActiveNavLinks = setActiveNavLinks;
 
     function normalizePath(path) {
         if (!path) return "/";
@@ -224,74 +287,16 @@ document.addEventListener("DOMContentLoaded", () => {
         return p || "/";
     }
 
+    function normalizeDietName(name) {
+        if (!name) return "";
+        return decodeURIComponent(String(name)).trim();
+    }
+
     const dietNavLoading = document.getElementById("diet-nav-loading");
     const dietNavTemplate = document.getElementById("diet-nav-item-template");
     const sidebarAddDietItem = document.getElementById("sidebar-add-diet-item");
 
-    function loadDietSidebar() {
-        const loadingItem = document.getElementById("diet-nav-loading");
-        const template = document.getElementById("diet-nav-item-template");
-        const parent = loadingItem?.parentElement || document.getElementById("navigation");
-        if (!loadingItem || !template?.content || !parent) {
-            return;
-        }
-        loadingItem.style.display = "";
-        const loadingLabel = loadingItem.querySelector("p");
-        if (loadingLabel) {
-            loadingLabel.textContent = "Loading...";
-        }
-        fetch("/api/diets/*")
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error(`Request failed with ${response.status}`);
-                }
-                return response.json();
-            })
-            .then((diets) => {
-                const dietNames = new Set();
-                if (Array.isArray(diets)) {
-                    diets.forEach((diet) => {
-                        if (diet?.diet_name) {
-                            dietNames.add(String(diet.diet_name));
-                        }
-                    });
-                }
-
-                if (dietNames.size === 0) {
-                    const emptyLabel = loadingItem.querySelector("p");
-                    if (emptyLabel) {
-                        emptyLabel.textContent = "No diets found.";
-                    }
-                    return;
-                }
-                
-
-                const sortedNames = Array.from(dietNames).sort((a, b) => a.localeCompare(b));
-                
-                parent.querySelectorAll("[data-diet-link='true']").forEach((node) => node.remove());
-                sortedNames.forEach((name) => {
-                    const item = template.content.firstElementChild.cloneNode(true);
-                    const link = item.querySelector("a");
-                    const label = item.querySelector("p");
-                    link.href = `/ui/diets?diet_name=${encodeURIComponent(name)}`;
-                    label.textContent = name;
-                    link.setAttribute("data-diet-link", "true");
-                    parent.insertBefore(item, loadingItem);
-                    console.log(name);
-                });
-                loadingItem.style.display = "none";
-                setActiveNavLinks();
-            })
-            .catch(() => {
-                const errorLabel = loadingItem.querySelector("p");
-                if (errorLabel) {
-                    errorLabel.textContent = "Failed to load diets.";
-                }
-            });
-    }
-
     loadDietSidebar();
-    window.loadDietSidebar = loadDietSidebar;
 
     if (sidebarAddDietItem) {
         sidebarAddDietItem.addEventListener("click", () => {

@@ -208,9 +208,17 @@
                         class="table table-sm table-bordered align-middle mb-0"
                         id="diet-items-table"
                         x-data
-                        @click.outside="$store.diet.stopEdit($event)"
-                        @keydown.enter.prevent="$store.diet.stopEdit()"
-                        @keydown.escape.prevent="$store.diet.stopEdit()"
+                        @click.outside="$store.diet.stopEdit()"
+                        @click="
+                          if ($store.diet.isEditing) {
+                            const cell = $event.target.closest('td');
+                            if (!cell || !(cell.classList.contains('name-col') || cell.classList.contains('quantity-col') || cell.classList.contains('color-col') || cell.classList.contains('dietItemDel-col'))) {
+                              $store.diet.stopEdit();
+                            }
+                          }
+                        "
+                        @keydown.enter.prevent="$store.diet.stopEdit(true)"
+                        @keydown.escape.prevent="$store.diet.stopEdit(true)"
                       >
                         <thead id="diet-items-head">
                           <tr>
@@ -231,7 +239,7 @@
                         <tbody id="diet-items-body" x-init="$store.diet.initSortable($el)">
                           <template x-for="row in $store.diet.dietItemNutritionList" :key="row._rowKey">
                             <tr :style="$store.diet.rowStyle(row)" :data-row-key="row._rowKey">
-                              <td x-show="$store.diet.isEditing">
+                              <td x-show="$store.diet.isEditing" class="dietItemDel-col" @click="$store.diet.startEdit(row)">
                                 <button
                                   type="button"
                                   class="btn btn-outline-danger btn-sm"
@@ -250,14 +258,14 @@
                                     'is-open': col === 'Name' && $store.diet.isFoodPickerFocused(row)
                                   }"
                                   :style="$store.diet.rowStyle(row, col)"
-                                  @click="(col === 'Name' || col === 'quantity') && $store.diet.startEdit(row)"
+                                  @click="(col === 'Name' || col === 'quantity' || col === 'color') && $store.diet.startEdit(row)"
                                 >
                                   <template x-if="col === 'color'">
                                     <div class="color-dropdown" :class="{ 'is-open': $store.diet.isColorMenuOpen(row) }">
                                       <button
                                         type="button"
                                         class="btn btn-sm color-toggle"
-                                        @click="$store.diet.isEditingRow(row) && $store.diet.toggleColorMenu(row)"
+                                        @click.stop="$store.diet.startEdit(row); $store.diet.toggleColorMenu(row)"
                                       >
                                         <i class="bi bi-eyedropper"></i>
                                       </button>
@@ -611,8 +619,12 @@
               return this.hiddenCols.includes(col);
             },
             startEdit(row) {
+              const nextKey = this.rowKey(row);
               this.isEditing = true;
-              this.editingKey = this.rowKey(row);
+              if (this.editingKey !== nextKey) {
+                this.colorMenuKey = null;
+              }
+              this.editingKey = nextKey;
               if (!this.editValues[this.editingKey]) {
                 this.editValues[this.editingKey] = {
                   Name: row.Name ?? "",
@@ -620,12 +632,15 @@
                 };
               }
             },
-            stopEdit() {
+            stopEdit(shouldFocus = false) {
               this.isEditing = false;
               this.editingKey = null;
               this.colorMenuKey = null;
               this.focusedFoodPickerKey = null;
-              document.body.focus();
+              if (shouldFocus) {
+                document.activeElement.blur();
+                document.body.focus({ preventScroll: true });
+              }
             },
             isEditingRow(row) {
               return this.isEditing && this.editingKey === this.rowKey(row);
@@ -967,7 +982,7 @@
         if (window.Alpine?.store) {
             const dietStore = Alpine.store('diet');
             if (dietStore?.isEditing) {
-                dietStore.stopEdit();
+                dietStore.stopEdit(true);
             }
         }
     });
