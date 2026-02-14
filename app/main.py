@@ -329,10 +329,6 @@ def logout(user: dict = Depends(verify_auth_token_get_user)):
 
 @app.get("/ui/diets")
 def diet_details(request: Request, diet_name: str, user: dict = Depends(verify_auth_token_get_user)):
-    return templates.TemplateResponse("dietsv2.html", {"request": request, "diet_name": diet_name})
-
-@app.get("/ui/diets_old")
-def diet_detailsv2(request: Request, diet_name: str, user: dict = Depends(verify_auth_token_get_user)):
     return templates.TemplateResponse("diets.html", {"request": request, "diet_name": diet_name})
 
 @app.get("/ui/foods")
