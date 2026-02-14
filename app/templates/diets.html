@@ -184,10 +184,10 @@
             <!--begin::Row-->
             <div class="row">
               <div class="col-12">
-                <div class="card">
+                <div class="card" x-data>
                   <div class="card-body">
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-                      <button id="diet-items-add" type="button" class="btn btn-outline-primary btn-sm">
+                      <button id="diet-items-add" type="button" class="btn btn-outline-primary btn-sm" @click="$store.diet.addItem({ dietName: $store.diet.dietName })">
                         Add Item
                       </button>
                       <button id="diet-items-save-all" type="button" class="btn btn-success btn-sm d-none">
@@ -196,10 +196,10 @@
                       <div id="diet-items-status" class="text-muted small"></div>
                       <div id="diet-items-hash" class="text-muted small"></div>
                       <div class="flex-grow-1"></div>
-                      <button id="diet-items-clone" type="button" class="btn btn-outline-success btn-sm">
+                      <button id="diet-items-clone" type="button" class="btn btn-outline-success btn-sm" @click="$store.diet.cloneDiet()">
                         Clone diet
                       </button>
-                      <button id="diet-items-delete-all" type="button" class="btn btn-outline-danger btn-sm">
+                      <button id="diet-items-delete-all" type="button" class="btn btn-outline-danger btn-sm" @click="$store.diet.deleteAllDietItems()">
                         Delete All
                       </button>
                     </div>
@@ -207,7 +207,6 @@
                       <table
                         class="table table-sm table-bordered align-middle mb-0"
                         id="diet-items-table"
-                        x-data
                         @click.outside="$store.diet.stopEdit()"
                         @click="
                           if ($store.diet.isEditing) {
@@ -1111,28 +1110,6 @@
     console.error("Failed to load RDA/UL:", error);
   }
   dietStore.dietName = dietName || "";
-
-  const addButton = document.getElementById("diet-items-add");
-  if (addButton) {
-    addButton.addEventListener("click", () => {
-      dietStore.addItem({ dietName });
-    });
-  }
-
-  const cloneButton = document.getElementById("diet-items-clone");
-  if (cloneButton) {
-    cloneButton.addEventListener("click", () => {
-      dietStore.cloneDiet();
-    });
-  }
-
-  const deleteAllButton = document.getElementById("diet-items-delete-all");
-  if (deleteAllButton) {
-    deleteAllButton.addEventListener("click", () => {
-      dietStore.deleteAllDietItems();
-    });
-  }
-
 
 </script>
 

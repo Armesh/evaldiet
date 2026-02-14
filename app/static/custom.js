@@ -2,7 +2,8 @@
 if (!localStorage.getItem("theme")) {
   localStorage.setItem("theme", "dark");
 }
-
+let userSettingsCache = null;
+let userSettingsPromise = null;
 
 function calculateDietNutrition(food, dietItem) {
     const servingSizeRaw = food ? food["Serving Size"] : undefined;
@@ -41,8 +42,7 @@ function getCookie(name) {
   return null;
 }
 
-let userSettingsCache = null;
-let userSettingsPromise = null;
+
 
 function coerceBoolean(value, fallback = false) {
     if (typeof value === "boolean") return value;
@@ -152,44 +152,31 @@ function loadDietSidebar() {
 document.addEventListener("DOMContentLoaded", () => {
     const body = document.body;
     body.setAttribute("data-bs-theme", localStorage.getItem("theme"));
-    document.documentElement.style.colorScheme = localStorage.getItem("theme");
+    document.documentElement.style.colorScheme = localStorage.getItem("theme"); // 🔑 tell the browser its color scheme
 
-    // Theme switch button
+    // Theme switch button logic
     const themeToggleBtn = document.getElementById("theme-toggle");
     if (themeToggleBtn) {
         const icon = themeToggleBtn.querySelector("i");
         const text = themeToggleBtn.querySelector(".theme-text");
 
-        function sync_toggle_button_html_with_theme() {
-            const t = body.getAttribute("data-bs-theme") === "dark" ? "dark" : "light";
-            if (t === "dark") {
-                icon.className = "nav-icon bi bi-sun";
-                if (text) text.textContent = "Light mode";
-            } else {
-                icon.className = "nav-icon bi bi-moon-stars";
-                if (text) text.textContent = "Dark mode";
-            }
+        const t = body.getAttribute("data-bs-theme") === "dark" ? "dark" : "light";
+        if (t === "dark") {
+            icon.className = "nav-icon bi bi-sun";
+            if (text) text.textContent = "Light mode";
+        } else {
+            icon.className = "nav-icon bi bi-moon-stars";
+            if (text) text.textContent = "Dark mode";
         }
 
         themeToggleBtn.addEventListener("click", (e) => {
             e.preventDefault();
             const opposite = body.getAttribute("data-bs-theme") === "dark" ? "light" : "dark";
-            body.setAttribute("data-bs-theme", opposite);
             localStorage.setItem("theme", opposite);
-            // 🔑 tell the browser its color scheme
-            document.documentElement.style.colorScheme = opposite;
-            
-            sync_toggle_button_html_with_theme();
             window.location.reload();
         });
-        // Theme switch button end
-
-        sync_toggle_button_html_with_theme(); //Sync theme toggle button in sidebar upon page load
+        // Theme switch button logic end
     }
-
-    const logoutForm = document.getElementById("logout-form");
-    logoutForm.addEventListener("submit", () => {});
-
 
     function setActiveNavLinks() {
         const currentPath = normalizePath(window.location.pathname);
