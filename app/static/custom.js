@@ -148,37 +148,8 @@ function loadDietSidebar() {
         });
 }
 
-function cacheFoods(force = false) {
-    const cachedFoods = localStorage.getItem("foods");
-    if (!force && cachedFoods) return;
-    return fetch("/api/foods", { credentials: "same-origin" })
-        .then((response) => {
-            if (!response.ok) {
-                throw new Error(`Request failed with ${response.status}`);
-            }
-            return response.json();
-        })
-        .then((foods) => {
-            const list = Array.isArray(foods) ? foods : [];
-            const keyed = {};
-            list.forEach((food) => {
-                if (food && food.fdc_id != null) {
-                    keyed[food.fdc_id] = food;
-                }
-            });
-            localStorage.setItem("foods", JSON.stringify(keyed));
-            console.log('Done localStorage.setItem("foods")');
-        })
-        .catch(() => {
-            // Ignore cache errors; foods are loaded on-demand elsewhere.
-        });
-}
-
-cacheFoods();
 
 document.addEventListener("DOMContentLoaded", () => {
-    const DIET_COLOR_SWATCHES_DARK = ["#971d1f", "#ad5322", "#af882e", "#538d28", "#2b8066", "#375875"];
-    const DIET_COLOR_SWATCHES_LIGHT = ["#d86a6b", "#d68a5a", "#d6b46a", "#8cc26a", "#6bb59c", "#7aa0b5"];
     const body = document.body;
     body.setAttribute("data-bs-theme", localStorage.getItem("theme"));
     document.documentElement.style.colorScheme = localStorage.getItem("theme");
@@ -209,14 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
             document.documentElement.style.colorScheme = opposite;
             
             sync_toggle_button_html_with_theme();
-            if (typeof loadDietItems === "function") {
-                const isDietPage = window.location.pathname === "/ui/diets";
-                const params = new URLSearchParams(window.location.search);
-                const hasDietName = params.has("diet_name") && params.get("diet_name");
-                if (isDietPage && hasDietName) {
-                    loadDietItems();
-                }
-            }
+            window.location.reload();
         });
         // Theme switch button end
 
@@ -224,9 +188,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const logoutForm = document.getElementById("logout-form");
-    logoutForm.addEventListener("submit", () => {
-        localStorage.removeItem("foods");
-    });
+    logoutForm.addEventListener("submit", () => {});
 
 
     function setActiveNavLinks() {
@@ -343,13 +305,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const foodColorProtein = document.getElementById("food-color-protein");
     const foodColorCarb = document.getElementById("food-color-carb");
     const foodColorFat = document.getElementById("food-color-fat");
-
-    function getDietColorSwatches() {
-        return localStorage.getItem("theme") === "light"
-            ? DIET_COLOR_SWATCHES_LIGHT
-            : DIET_COLOR_SWATCHES_DARK;
-    }
-
 
     function parseNumber(value) {
         if (typeof value === "number" && Number.isFinite(value)) {
@@ -581,9 +536,6 @@ document.addEventListener("DOMContentLoaded", () => {
             })
             .then(() => {
                 alert(`Deleted food ${id}${foodName ? ` (${foodName})` : ""}.`);
-                return cacheFoods(true);
-            })
-            .then(() => {
                 window.location.reload();
             })
             .catch((error) => {
@@ -615,13 +567,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 const fdcId = data?.fdc_id;
                 if (fdcId != null) {
                     alert(`Created food ${fdcId} (${name}).`);
-                    return cacheFoods(true).then(() => {
-                        window.location.href = `/ui/foods/edit/${encodeURIComponent(fdcId)}`;
-                    });
+                    window.location.href = `/ui/foods/edit/${encodeURIComponent(fdcId)}`;
+                    return;
                 }
-                return cacheFoods(true).then(() => {
-                    window.location.reload();
-                });
+                window.location.reload();
+                return;
             })
             .catch((error) => {
                 alert(`Failed to create food: ${error.message}`);
@@ -688,7 +638,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 .then((response) => {
                     alert(response);
                     foodsFdcInput.value = "";
-                    return cacheFoods(true);
                 })
                 .then(() => {
                     window.location.reload();
@@ -849,7 +798,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     })
                     .then(() => {
                         alert("Food update was successful.");
-                        cacheFoods(true);
                         foodsEditOriginal = new Map();
                         inputs.forEach((input) => {
                             const field = input.dataset.field;

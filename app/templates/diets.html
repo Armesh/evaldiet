@@ -451,8 +451,7 @@
             sortable: null,
             focusedFoodPickerKey: null,
             getColorSwatches() {
-              const theme = localStorage.getItem("theme") === "light" ? "light" : "dark";
-              return theme === "light"
+              return localStorage.getItem("theme") === "light"
                 ? ["#d86a6b", "#d68a5a", "#d6b46a", "#8cc26a", "#6bb59c", "#7aa0b5"]
                 : ["#971d1f", "#ad5322", "#af882e", "#538d28", "#2b8066", "#375875"];
             },
@@ -992,7 +991,16 @@
   const params = new URLSearchParams(window.location.search);
   const dietName = params.get("diet_name");
 
-  const foods = JSON.parse(localStorage.getItem("foods"));
+  const foodsResponse = await fetch("/api/foods", { credentials: "same-origin" });
+  const foodsList = await foodsResponse.json();
+  const foods = {};
+  if (Array.isArray(foodsList)) {
+    foodsList.forEach((food) => {
+      if (food && food.fdc_id != null) {
+        foods[food.fdc_id] = food;
+      }
+    });
+  }
   let dietItems = [];
   let dietItemNutritionList = [];
   let selectedColumns = [];
